@@ -52,8 +52,8 @@ pub fn category_avg_tokens(category: &str, subcmd: &str) -> usize {
 // Patterns ordered to match RTK_RULES indices exactly.
 const PATTERNS: &[&str] = &[
     r"^git\s+(status|log|diff|show|add|commit|push|pull|branch|fetch|stash|worktree)",
-    r"^gh\s+(pr|issue|run|repo|api)",
-    r"^cargo\s+(build|test|clippy|check|fmt)",
+    r"^gh\s+(pr|issue|run|repo|api|release)",
+    r"^cargo\s+(build|test|clippy|check|fmt|install)",
     r"^pnpm\s+(list|ls|outdated|install)",
     r"^npm\s+(run|exec)",
     r"^npx\s+",
@@ -68,8 +68,10 @@ const PATTERNS: &[&str] = &[
     r"^(pnpm\s+|npx\s+)?(vitest|jest|test)(\s|$)",
     r"^(npx\s+|pnpm\s+)?playwright",
     r"^(npx\s+|pnpm\s+)?prisma",
-    r"^docker\s+(ps|images|logs)",
-    r"^kubectl\s+(get|logs)",
+    r"^docker\s+(ps|images|logs|run|exec|build)",
+    r"^kubectl\s+(get|logs|describe|apply)",
+    r"^tree(\s|$)",
+    r"^diff\s+",
     r"^curl\s+",
     r"^wget\s+",
     r"^(python3?\s+-m\s+)?mypy(\s|$)",
@@ -250,6 +252,22 @@ const RULES: &[RtkRule] = &[
         subcmd_status: &[],
     },
     RtkRule {
+        rtk_cmd: "rtk tree",
+        rewrite_prefixes: &["tree"],
+        category: "Files",
+        savings_pct: 70.0,
+        subcmd_savings: &[],
+        subcmd_status: &[],
+    },
+    RtkRule {
+        rtk_cmd: "rtk diff",
+        rewrite_prefixes: &["diff"],
+        category: "Files",
+        savings_pct: 60.0,
+        subcmd_savings: &[],
+        subcmd_status: &[],
+    },
+    RtkRule {
         rtk_cmd: "rtk curl",
         rewrite_prefixes: &["curl"],
         category: "Network",
@@ -370,7 +388,9 @@ const IGNORED_PREFIXES: &[&str] = &[
     "case ",
 ];
 
-const IGNORED_EXACT: &[&str] = &["cd", "echo", "true", "false", "wait", "pwd", "bash", "sh", "fi", "done"];
+const IGNORED_EXACT: &[&str] = &[
+    "cd", "echo", "true", "false", "wait", "pwd", "bash", "sh", "fi", "done",
+];
 
 lazy_static! {
     static ref REGEX_SET: RegexSet = RegexSet::new(PATTERNS).expect("invalid regex patterns");
@@ -727,6 +747,32 @@ fn rewrite_compound(cmd: &str) -> Option<String> {
     }
 }
 
+/// Rewrite `head -N file` → `rtk read file --max-lines N`.
+/// Returns `None` if the command doesn't match this pattern (fall through to generic logic).
+fn rewrite_head_numeric(cmd: &str) -> Option<String> {
+    // Match: head -<digits> <file>  (with optional env prefix)
+    lazy_static! {
+        static ref HEAD_N: Regex = Regex::new(r"^head\s+-(\d+)\s+(.+)$").expect("valid regex");
+        static ref HEAD_LINES: Regex =
+            Regex::new(r"^head\s+--lines=(\d+)\s+(.+)$").expect("valid regex");
+    }
+    if let Some(caps) = HEAD_N.captures(cmd) {
+        let n = caps.get(1)?.as_str();
+        let file = caps.get(2)?.as_str();
+        return Some(format!("rtk read {} --max-lines {}", file, n));
+    }
+    if let Some(caps) = HEAD_LINES.captures(cmd) {
+        let n = caps.get(1)?.as_str();
+        let file = caps.get(2)?.as_str();
+        return Some(format!("rtk read {} --max-lines {}", file, n));
+    }
+    // head with any other flag (e.g. -c, -q): skip rewriting to avoid clap errors
+    if cmd.starts_with("head -") {
+        return None;
+    }
+    None
+}
+
 /// Rewrite a single (non-compound) command segment.
 /// Returns `Some(rewritten)` if matched (including already-RTK pass-through).
 /// Returns `None` if no match (caller uses original segment).
@@ -739,6 +785,14 @@ fn rewrite_segment(seg: &str) -> Option<String> {
     // Already RTK — pass through unchanged
     if trimmed.starts_with("rtk ") || trimmed == "rtk" {
         return Some(trimmed.to_string());
+    }
+
+    // Special case: `head -N file` / `head --lines=N file` → `rtk read file --max-lines N`
+    // Must intercept before generic prefix replacement, which would produce `rtk read -20 file`.
+    // Only intercept when head has a flag (-N, --lines=N, -c, etc.); plain `head file` falls
+    // through to the generic rewrite below and produces `rtk read file` as expected.
+    if trimmed.starts_with("head -") {
+        return rewrite_head_numeric(trimmed);
     }
 
     // Use classify_command for correct ignore/prefix handling
@@ -1247,6 +1301,186 @@ mod tests {
         assert_eq!(
             rewrite_command("rtk git add . && cargo test"),
             Some("rtk git add . && rtk cargo test".into())
+        );
+    }
+
+    // --- P0.2: head -N rewrite ---
+
+    #[test]
+    fn test_rewrite_head_numeric_flag() {
+        // head -20 file → rtk read file --max-lines 20 (not rtk read -20 file)
+        assert_eq!(
+            rewrite_command("head -20 src/main.rs"),
+            Some("rtk read src/main.rs --max-lines 20".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_head_lines_long_flag() {
+        assert_eq!(
+            rewrite_command("head --lines=50 src/lib.rs"),
+            Some("rtk read src/lib.rs --max-lines 50".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_head_no_flag_still_rewrites() {
+        // plain `head file` → `rtk read file` (no numeric flag)
+        assert_eq!(
+            rewrite_command("head src/main.rs"),
+            Some("rtk read src/main.rs".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_head_other_flag_skipped() {
+        // head -c 100 file: unsupported flag, skip rewriting
+        assert_eq!(rewrite_command("head -c 100 src/main.rs"), None);
+    }
+
+    // --- New registry entries ---
+
+    #[test]
+    fn test_classify_gh_release() {
+        assert!(matches!(
+            classify_command("gh release list"),
+            Classification::Supported {
+                rtk_equivalent: "rtk gh",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_classify_cargo_install() {
+        assert!(matches!(
+            classify_command("cargo install rtk"),
+            Classification::Supported {
+                rtk_equivalent: "rtk cargo",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_classify_docker_run() {
+        assert!(matches!(
+            classify_command("docker run --rm ubuntu bash"),
+            Classification::Supported {
+                rtk_equivalent: "rtk docker",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_classify_docker_exec() {
+        assert!(matches!(
+            classify_command("docker exec -it mycontainer bash"),
+            Classification::Supported {
+                rtk_equivalent: "rtk docker",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_classify_docker_build() {
+        assert!(matches!(
+            classify_command("docker build -t myimage ."),
+            Classification::Supported {
+                rtk_equivalent: "rtk docker",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_classify_kubectl_describe() {
+        assert!(matches!(
+            classify_command("kubectl describe pod mypod"),
+            Classification::Supported {
+                rtk_equivalent: "rtk kubectl",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_classify_kubectl_apply() {
+        assert!(matches!(
+            classify_command("kubectl apply -f deploy.yaml"),
+            Classification::Supported {
+                rtk_equivalent: "rtk kubectl",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_classify_tree() {
+        assert!(matches!(
+            classify_command("tree src/"),
+            Classification::Supported {
+                rtk_equivalent: "rtk tree",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_classify_diff() {
+        assert!(matches!(
+            classify_command("diff file1.txt file2.txt"),
+            Classification::Supported {
+                rtk_equivalent: "rtk diff",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_rewrite_tree() {
+        assert_eq!(rewrite_command("tree src/"), Some("rtk tree src/".into()));
+    }
+
+    #[test]
+    fn test_rewrite_diff() {
+        assert_eq!(
+            rewrite_command("diff file1.txt file2.txt"),
+            Some("rtk diff file1.txt file2.txt".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_gh_release() {
+        assert_eq!(
+            rewrite_command("gh release list"),
+            Some("rtk gh release list".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_cargo_install() {
+        assert_eq!(
+            rewrite_command("cargo install rtk"),
+            Some("rtk cargo install rtk".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_kubectl_describe() {
+        assert_eq!(
+            rewrite_command("kubectl describe pod mypod"),
+            Some("rtk kubectl describe pod mypod".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_docker_run() {
+        assert_eq!(
+            rewrite_command("docker run --rm ubuntu bash"),
+            Some("rtk docker run --rm ubuntu bash".into())
         );
     }
 }

@@ -1146,12 +1146,13 @@ mod tests {
     fn test_hook_has_guards() {
         assert!(REWRITE_HOOK.contains("command -v rtk"));
         assert!(REWRITE_HOOK.contains("command -v jq"));
-        // Guards must be BEFORE set -euo pipefail
-        let guard_pos = REWRITE_HOOK.find("command -v rtk").unwrap();
-        let set_pos = REWRITE_HOOK.find("set -euo pipefail").unwrap();
+        // Guards (rtk/jq availability checks) must appear before the actual delegation call.
+        // The thin delegating hook no longer uses set -euo pipefail.
+        let jq_pos = REWRITE_HOOK.find("command -v jq").unwrap();
+        let rtk_delegate_pos = REWRITE_HOOK.find("rtk rewrite \"$CMD\"").unwrap();
         assert!(
-            guard_pos < set_pos,
-            "Guards must come before set -euo pipefail"
+            jq_pos < rtk_delegate_pos,
+            "Guards must appear before rtk rewrite delegation"
         );
     }
 

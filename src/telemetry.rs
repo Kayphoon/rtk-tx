@@ -137,6 +137,7 @@ fn detect_install_method() -> &'static str {
         Err(_) => return "unknown",
     };
 
+    // Resolve symlinks to find the real binary location
     let real_path = std::fs::canonicalize(&exe)
         .unwrap_or(exe)
         .to_string_lossy()

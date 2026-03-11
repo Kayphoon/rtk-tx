@@ -50,6 +50,7 @@ pub enum Language {
     Java,
     Ruby,
     Shell,
+    /// Data formats (JSON, YAML, TOML, XML, CSV) — no comment stripping
     Data,
     Unknown,
 }
@@ -69,7 +70,7 @@ impl Language {
             "sh" | "bash" | "zsh" => Language::Shell,
             "json" | "jsonc" | "json5" | "yaml" | "yml" | "toml" | "xml" | "html" | "htm"
             | "css" | "scss" | "svg" | "md" | "markdown" | "txt" | "csv" | "tsv" | "env"
-            | "ini" | "cfg" | "conf" | "lock" => Language::Data,
+            | "ini" | "cfg" | "conf" | "lock" | "graphql" | "gql" | "sql" => Language::Data,
             _ => Language::Unknown,
         }
     }
@@ -249,6 +250,11 @@ lazy_static! {
 
 impl FilterStrategy for AggressiveFilter {
     fn filter(&self, content: &str, lang: &Language) -> String {
+        // Data formats (JSON, YAML, etc.) must never be code-filtered
+        if *lang == Language::Data {
+            return MinimalFilter.filter(content, lang);
+        }
+
         let minimal = MinimalFilter.filter(content, lang);
         let mut result = String::with_capacity(minimal.len() / 2);
         let mut brace_depth = 0;
@@ -443,6 +449,29 @@ mod tests {
         assert!(
             result.contains("**/package.json"),
             "glob pattern must be preserved"
+        );
+        assert!(
+            result.contains("lint-staged"),
+            "lint-staged section must not be stripped"
+        );
+    }
+
+    #[test]
+    fn test_json_aggressive_filter_preserves_structure() {
+        let json = r#"{
+  "name": "my-app",
+  "dependencies": {
+    "react": "^18.0.0"
+  },
+  "scripts": {
+    "dev": "next dev /* not a comment */"
+  }
+}"#;
+        let filter = AggressiveFilter;
+        let result = filter.filter(json, &Language::Data);
+        assert!(
+            result.contains("/* not a comment */"),
+            "Aggressive filter must not strip comment-like patterns in JSON"
         );
     }
 

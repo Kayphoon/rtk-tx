@@ -547,14 +547,27 @@ pub fn run_filter_tests(filter_name_opt: Option<&str>) -> VerifyResults {
         &mut tested_filter_names,
     );
 
-    if let Ok(content) = std::fs::read_to_string(".rtk/filters.toml") {
-        collect_test_outcomes(
-            &content,
-            filter_name_opt,
-            &mut outcomes,
-            &mut all_filter_names,
-            &mut tested_filter_names,
-        );
+    // Trust-gated: only verify project-local filters if trusted (SA-2025-RTK-002)
+    let project_path = std::path::Path::new(".rtk/filters.toml");
+    if project_path.exists() {
+        let trust_status =
+            crate::trust::check_trust(project_path).unwrap_or(crate::trust::TrustStatus::Untrusted);
+        match trust_status {
+            crate::trust::TrustStatus::Trusted | crate::trust::TrustStatus::EnvOverride => {
+                if let Ok(content) = std::fs::read_to_string(project_path) {
+                    collect_test_outcomes(
+                        &content,
+                        filter_name_opt,
+                        &mut outcomes,
+                        &mut all_filter_names,
+                        &mut tested_filter_names,
+                    );
+                }
+            }
+            _ => {
+                eprintln!("[rtk] WARNING: untrusted project filters skipped in verify");
+            }
+        }
     }
 
     let filters_without_tests = all_filter_names

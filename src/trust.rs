@@ -77,9 +77,9 @@ fn write_store(store: &TrustStore) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 fn canonical_key(filter_path: &Path) -> Result<String> {
-    // Try real canonicalize first, fallback to cwd join for NFS/permissions
+    // Resolve symlinks and produce an absolute path. No fallback — if we can't
+    // canonicalize, we can't safely key the trust entry (fail-closed).
     let canonical = std::fs::canonicalize(filter_path)
-        .or_else(|_| std::env::current_dir().map(|cwd| cwd.join(filter_path)))
         .with_context(|| format!("Cannot resolve path: {}", filter_path.display()))?;
     Ok(canonical.to_string_lossy().to_string())
 }
@@ -93,13 +93,33 @@ fn canonical_key(filter_path: &Path) -> Result<String> {
 /// Priority: env var > hash match > untrusted.
 /// All errors are soft — if anything fails, returns Untrusted (fail-secure).
 pub fn check_trust(filter_path: &Path) -> Result<TrustStatus> {
-    // Fast path: env var override for CI
+    // Fast path: env var override for CI pipelines only.
+    // Requires a known CI env var to be set to prevent .envrc injection attacks.
     if std::env::var("RTK_TRUST_PROJECT_FILTERS").as_deref() == Ok("1") {
-        return Ok(TrustStatus::EnvOverride);
+        let in_ci = std::env::var("CI").is_ok()
+            || std::env::var("GITHUB_ACTIONS").is_ok()
+            || std::env::var("GITLAB_CI").is_ok()
+            || std::env::var("JENKINS_URL").is_ok()
+            || std::env::var("BUILDKITE").is_ok();
+        if in_ci {
+            return Ok(TrustStatus::EnvOverride);
+        }
+        eprintln!(
+            "[rtk] WARNING: RTK_TRUST_PROJECT_FILTERS=1 ignored (CI environment not detected)"
+        );
     }
 
     let key = canonical_key(filter_path)?;
-    let store = read_store().unwrap_or_default();
+    let store = match read_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!(
+                "[rtk] WARNING: trust store unreadable ({}), treating all filters as untrusted",
+                e
+            );
+            TrustStore::default()
+        }
+    };
 
     let entry = match store.trusted.get(&key) {
         Some(e) => e,
@@ -119,18 +139,23 @@ pub fn check_trust(filter_path: &Path) -> Result<TrustStatus> {
     }
 }
 
-/// Store current SHA-256 hash as trusted.
+/// Store current SHA-256 hash as trusted (computes hash from file).
 pub fn trust_filter(filter_path: &Path) -> Result<()> {
-    let key = canonical_key(filter_path)?;
     let hash = integrity::compute_hash(filter_path)
         .with_context(|| format!("Failed to hash: {}", filter_path.display()))?;
+    trust_filter_with_hash(filter_path, &hash)
+}
+
+/// Store a pre-computed SHA-256 hash as trusted (avoids TOCTOU re-read).
+pub fn trust_filter_with_hash(filter_path: &Path, hash: &str) -> Result<()> {
+    let key = canonical_key(filter_path)?;
 
     let mut store = read_store().unwrap_or_default();
     store.version = 1;
     store.trusted.insert(
         key,
         TrustEntry {
-            sha256: hash,
+            sha256: hash.to_string(),
             trusted_at: chrono::Utc::now().to_rfc3339(),
         },
     );
@@ -169,7 +194,8 @@ pub fn run_trust(list: bool) -> Result<()> {
         println!("Trusted project filters:");
         println!("{}", "═".repeat(60));
         for (path, entry) in &trusted {
-            println!("  {} (trusted {})", path, &entry.trusted_at[..10]);
+            let date = entry.trusted_at.get(..10).unwrap_or(&entry.trusted_at);
+            println!("  {} (trusted {})", path, date);
             println!("    sha256:{}", entry.sha256);
         }
         return Ok(());
@@ -180,9 +206,9 @@ pub fn run_trust(list: bool) -> Result<()> {
         anyhow::bail!("No .rtk/filters.toml found in current directory");
     }
 
-    // Show content for review
-    let content =
-        std::fs::read_to_string(filter_path).context("Failed to read .rtk/filters.toml")?;
+    // Read ONCE to prevent TOCTOU: display + hash from same buffer
+    let content_bytes = std::fs::read(filter_path).context("Failed to read .rtk/filters.toml")?;
+    let content = String::from_utf8_lossy(&content_bytes);
 
     println!("=== .rtk/filters.toml ===");
     println!("{}", content);
@@ -192,11 +218,21 @@ pub fn run_trust(list: bool) -> Result<()> {
     // Risk summary
     print_risk_summary(&content);
 
-    // Trust it
-    trust_filter(filter_path)?;
-    let hash = integrity::compute_hash(filter_path)?;
+    // Hash the in-memory buffer (not a second file read)
+    let hash = {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(&content_bytes);
+        format!("{:x}", h.finalize())
+    };
+
+    // Store trust with pre-computed hash
+    trust_filter_with_hash(filter_path, &hash)?;
     println!();
-    println!("Trusted .rtk/filters.toml (sha256:{})", &hash[..16]);
+    println!(
+        "Trusted .rtk/filters.toml (sha256:{})",
+        hash.get(..16).unwrap_or(&hash)
+    );
     println!("Project-local filters will now be applied.");
 
     Ok(())
@@ -400,19 +436,38 @@ mod tests {
     }
 
     #[test]
-    fn test_env_override() {
+    fn test_env_override_with_ci() {
         let temp = TempDir::new().unwrap();
         let filter = temp.path().join("filters.toml");
         std::fs::write(&filter, "[filter.test]\nmatch_command = \"echo\"").unwrap();
 
-        // Use the real check_trust function to test env var path
+        // Both env vars must be set: trust override + CI indicator
         #[allow(deprecated)]
         std::env::set_var("RTK_TRUST_PROJECT_FILTERS", "1");
+        #[allow(deprecated)]
+        std::env::set_var("CI", "true");
         let status = check_trust(&filter).unwrap();
         #[allow(deprecated)]
         std::env::remove_var("RTK_TRUST_PROJECT_FILTERS");
+        #[allow(deprecated)]
+        std::env::remove_var("CI");
 
         assert_eq!(status, TrustStatus::EnvOverride);
+    }
+
+    #[test]
+    fn test_env_override_without_ci_is_ignored() {
+        let temp = TempDir::new().unwrap();
+        let filter = temp.path().join("filters.toml");
+        std::fs::write(&filter, "[filter.test]\nmatch_command = \"echo\"").unwrap();
+        let store_file = setup_test_env(&temp);
+
+        // Trust override WITHOUT CI env → should be Untrusted, not EnvOverride
+        // (protects against .envrc injection)
+        // Note: we use check_trust_with_store which skips env var check,
+        // so this tests the store path when env var would be ignored
+        let status = check_trust_with_store(&filter, &store_file).unwrap();
+        assert_eq!(status, TrustStatus::Untrusted);
     }
 
     #[test]

@@ -104,7 +104,7 @@ async function askBackend(
     let result;
     switch (backend) {
       case "claude":
-        result = await $`cat ${tmpFile} | claude -p --model haiku --max-turns 1 --no-session-persistence`
+        result = await $`cat ${tmpFile} | claude -p --bare --model haiku --no-session-persistence`
           .quiet().nothrow().timeout(60_000);
         break;
       case "gemini":

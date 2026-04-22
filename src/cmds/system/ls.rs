@@ -74,6 +74,14 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
         |raw| {
             let (entries, summary) = compact_ls(raw, show_all);
 
+            // Parser failure sentinel: ls binary produced output but nothing parsed.
+            // This happens when `ls` on PATH is eza/exa/lsd (different date format).
+            // Fall back to raw output rather than returning "(empty)" for a non-empty dir.
+            if entries.is_empty() && summary.is_empty() && !raw.trim().is_empty() {
+                eprintln!("rtk: ls output format not recognized (eza/exa/lsd?), passing through");
+                return raw.to_string();
+            }
+
             // Only show summary in interactive mode (not when piped)
             let is_tty = std::io::stdout().is_terminal();
             let filtered = if is_tty {
@@ -157,15 +165,19 @@ fn compact_ls(raw: &str, show_all: bool) -> (String, String) {
     let mut dirs: Vec<String> = Vec::new();
     let mut files: Vec<(String, String)> = Vec::new(); // (name, size)
     let mut by_ext: HashMap<String, usize> = HashMap::new();
+    let mut parse_hit = false;
+    let mut any_content_line = false;
 
     for line in raw.lines() {
         if line.starts_with("total ") || line.is_empty() {
             continue;
         }
+        any_content_line = true;
 
         let Some((file_type, size, name)) = parse_ls_line(line) else {
             continue;
         };
+        parse_hit = true;
 
         // Skip . and ..
         if name == "." || name == ".." {
@@ -191,6 +203,11 @@ fn compact_ls(raw: &str, show_all: bool) -> (String, String) {
     }
 
     if dirs.is_empty() && files.is_empty() {
+        // Return sentinel (both empty strings) when output was present but nothing parsed —
+        // caller will fall back to raw output (e.g. eza/exa/lsd format).
+        if any_content_line && !parse_hit {
+            return (String::new(), String::new());
+        }
         return ("(empty)\n".to_string(), String::new());
     }
 
@@ -289,6 +306,21 @@ mod tests {
         let (entries, summary) = compact_ls(input, false);
         assert_eq!(entries, "(empty)\n");
         assert!(summary.is_empty());
+    }
+
+    // Regression test for #1321: eza uses day-first dates (22 Apr 14:30) which
+    // the POSIX parser doesn't recognize. compact_ls must return the sentinel
+    // (both empty) so the caller falls back to raw output instead of "(empty)".
+    #[test]
+    fn test_compact_eza_format_returns_sentinel() {
+        let input = "total 0\n\
+                     drwxr-xr-x  2 user staff  64 22 Apr 14:30 src\n\
+                     .rw-r--r--  1 user staff 1234 22 Apr 14:30 file.txt\n";
+        let (entries, summary) = compact_ls(input, false);
+        assert!(
+            entries.is_empty() && summary.is_empty(),
+            "eza format should return sentinel (both empty), got entries={entries:?}"
+        );
     }
 
     #[test]

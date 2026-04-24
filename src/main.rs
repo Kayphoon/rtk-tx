@@ -651,6 +651,17 @@ enum Commands {
         require_all: bool,
     },
 
+    /// Recover original content referenced by a §ref:HASH§ dedup token
+    #[command(about = "Recover original content from a §ref:HASH§ dedup token")]
+    Expand {
+        /// The hash prefix (first 8 chars from the §ref:HASH§ token)
+        hash: String,
+    },
+
+    /// Evict stale dedup cache entries and show cache stats
+    #[command(about = "Evict stale dedup cache entries and show stats")]
+    DedupCompact,
+
     /// Ruff linter/formatter with compact output
     Ruff {
         /// Ruff arguments (e.g., check, format --check)
@@ -2368,6 +2379,45 @@ fn run_cli() -> Result<i32> {
                 hooks::integrity::run_verify(cli.verbose)?;
                 hooks::verify_cmd::run(None, require_all)?;
             }
+            0
+        }
+
+        Commands::Expand { hash } => {
+            use crate::core::dedup_cache::DedupCache;
+            let db_path = core::config::Config::load()
+                .ok()
+                .and_then(|c| c.tracking.database_path)
+                .unwrap_or_else(|| {
+                    dirs::data_local_dir()
+                        .unwrap_or_else(|| std::path::PathBuf::from("."))
+                        .join("rtk/history.db")
+                });
+            let cache = DedupCache::new(db_path)?;
+            match cache.expand_prefix(&hash)? {
+                Some(content) => print!("{}", content),
+                None => {
+                    eprintln!("rtk expand: no cached content for hash '{hash}'");
+                    std::process::exit(1);
+                }
+            }
+            0
+        }
+
+        Commands::DedupCompact => {
+            use crate::core::dedup_cache::DedupCache;
+            let db_path = core::config::Config::load()
+                .ok()
+                .and_then(|c| c.tracking.database_path)
+                .unwrap_or_else(|| {
+                    dirs::data_local_dir()
+                        .unwrap_or_else(|| std::path::PathBuf::from("."))
+                        .join("rtk/history.db")
+                });
+            let cache = DedupCache::new(db_path)?;
+            let n = cache.evict_stale()?;
+            println!("rtk dedup-compact: evicted {n} stale cache entries");
+            let stats = cache.stats()?;
+            println!("  Cache: {} entries, {:.1} KB", stats.count, stats.size_kb);
             0
         }
     };

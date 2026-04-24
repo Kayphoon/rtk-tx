@@ -3,7 +3,7 @@
 //! instead of recompressing the full output.
 
 use anyhow::{Context, Result};
-use rusqlite;
+use rusqlite::{self, OptionalExtension};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
@@ -99,6 +99,45 @@ impl DedupCache {
             .context("Failed to evict stale cache entries")?;
         Ok(n)
     }
+
+    /// Lookup by hash prefix (first 8 chars). Returns the stored compressed content or None.
+    pub fn expand_prefix(&self, prefix: &str) -> Result<Option<String>> {
+        let conn =
+            rusqlite::Connection::open(&self.db_path).context("Failed to open dedup cache")?;
+        let pattern = format!("{}%", prefix);
+        conn.query_row(
+            "SELECT compressed FROM dedup_cache WHERE hash LIKE ?1 LIMIT 1",
+            rusqlite::params![pattern],
+            |row| row.get(0),
+        )
+        .optional()
+        .context("Failed to query dedup cache")
+    }
+
+    /// Return basic cache statistics.
+    pub fn stats(&self) -> Result<CacheStats> {
+        let conn =
+            rusqlite::Connection::open(&self.db_path).context("Failed to open dedup cache")?;
+        let count: usize = conn
+            .query_row("SELECT COUNT(*) FROM dedup_cache", [], |r| r.get(0))
+            .unwrap_or(0);
+        let size_bytes: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(LENGTH(compressed)), 0) FROM dedup_cache",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        Ok(CacheStats {
+            count,
+            size_kb: size_bytes as f64 / 1024.0,
+        })
+    }
+}
+
+pub struct CacheStats {
+    pub count: usize,
+    pub size_kb: f64,
 }
 
 /// Compute the SHA-256 hex digest of a string.

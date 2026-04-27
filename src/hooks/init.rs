@@ -1405,6 +1405,236 @@ fn run_antigravity_mode_at(base_dir: &Path, verbose: u8) -> Result<()> {
     Ok(())
 }
 
+// ─── Hermes support ────────────────────────────────────────────
+
+const HERMES_PLUGIN_INIT: &str = include_str!("../../hermes/rtk-rewrite/__init__.py");
+const HERMES_PLUGIN_YAML: &str = include_str!("../../hermes/rtk-rewrite/plugin.yaml");
+const HERMES_PLUGIN_NAME: &str = "rtk-rewrite";
+
+pub fn run_hermes_mode(verbose: u8) -> Result<()> {
+    let hermes_home = resolve_home_subdir(".hermes")?;
+    run_hermes_mode_at(&hermes_home, verbose)
+}
+
+fn run_hermes_mode_at(hermes_home: &Path, verbose: u8) -> Result<()> {
+    let plugin_dir = hermes_home.join("plugins").join(HERMES_PLUGIN_NAME);
+    fs::create_dir_all(&plugin_dir).with_context(|| {
+        format!(
+            "Failed to create Hermes plugin directory: {}",
+            plugin_dir.display()
+        )
+    })?;
+
+    let init_path = plugin_dir.join("__init__.py");
+    let manifest_path = plugin_dir.join("plugin.yaml");
+    write_if_changed(&init_path, HERMES_PLUGIN_INIT, "Hermes plugin", verbose)?;
+    write_if_changed(
+        &manifest_path,
+        HERMES_PLUGIN_YAML,
+        "Hermes plugin manifest",
+        verbose,
+    )?;
+
+    let config_path = hermes_home.join("config.yaml");
+    let existing_config = if config_path.exists() {
+        fs::read_to_string(&config_path)
+            .with_context(|| format!("Failed to read Hermes config: {}", config_path.display()))?
+    } else {
+        String::new()
+    };
+    let patched_config = patch_hermes_config(&existing_config);
+    write_if_changed(&config_path, &patched_config, "Hermes config", verbose)?;
+
+    println!("\nRTK configured for Hermes.\n");
+    println!("  Plugin: {}", plugin_dir.display());
+    println!("  Config: {}", config_path.display());
+    println!("  Hermes will now rewrite terminal commands through rtk.");
+    println!("  Restart Hermes. Test with: git status\n");
+
+    Ok(())
+}
+
+fn patch_hermes_config(existing: &str) -> String {
+    if existing.trim().is_empty() {
+        return hermes_plugins_block();
+    }
+
+    let mut lines = split_yaml_lines(existing);
+    let Some(plugins_idx) = find_yaml_key_line(&lines, "plugins", 0, None) else {
+        return append_hermes_plugins_block(existing);
+    };
+
+    let plugins_indent = yaml_indent(&lines[plugins_idx]);
+    let plugins_end = yaml_block_end(&lines, plugins_idx, plugins_indent);
+    let Some(enabled_idx) = find_yaml_key_line(
+        &lines,
+        "enabled",
+        plugins_idx + 1,
+        Some((plugins_end, plugins_indent)),
+    ) else {
+        let enabled_block = format!(
+            "{}enabled:\n{}  - {}\n",
+            " ".repeat(plugins_indent + 2),
+            " ".repeat(plugins_indent + 2),
+            HERMES_PLUGIN_NAME
+        );
+        lines.insert(plugins_end, enabled_block);
+        return lines.concat();
+    };
+
+    if yaml_line_without_ending(&lines[enabled_idx]).contains('[') {
+        patch_inline_hermes_enabled(&mut lines, enabled_idx);
+        return lines.concat();
+    }
+
+    patch_block_hermes_enabled(&mut lines, enabled_idx);
+    lines.concat()
+}
+
+fn split_yaml_lines(input: &str) -> Vec<String> {
+    if input.is_empty() {
+        Vec::new()
+    } else {
+        input.split_inclusive('\n').map(str::to_string).collect()
+    }
+}
+
+fn hermes_plugins_block() -> String {
+    format!("plugins:\n  enabled:\n    - {}\n", HERMES_PLUGIN_NAME)
+}
+
+fn append_hermes_plugins_block(existing: &str) -> String {
+    let mut patched = existing.to_string();
+    if !patched.ends_with('\n') {
+        patched.push('\n');
+    }
+    patched.push_str(&hermes_plugins_block());
+    patched
+}
+
+fn find_yaml_key_line(
+    lines: &[String],
+    key: &str,
+    start: usize,
+    block: Option<(usize, usize)>,
+) -> Option<usize> {
+    let end = block.map_or(lines.len(), |(end, _)| end);
+    let min_indent = block.map(|(_, indent)| indent);
+
+    lines[start..end]
+        .iter()
+        .enumerate()
+        .find_map(|(offset, line)| {
+            let raw = yaml_line_without_ending(line);
+            let trimmed = raw.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                return None;
+            }
+
+            if min_indent.is_some_and(|indent| yaml_indent(line) <= indent) {
+                return None;
+            }
+
+            let is_key = trimmed == format!("{key}:") || trimmed.starts_with(&format!("{key}:"));
+            is_key.then_some(start + offset)
+        })
+}
+
+fn yaml_block_end(lines: &[String], start: usize, parent_indent: usize) -> usize {
+    lines[start + 1..]
+        .iter()
+        .enumerate()
+        .find_map(|(offset, line)| {
+            let raw = yaml_line_without_ending(line);
+            let trimmed = raw.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                return None;
+            }
+
+            (yaml_indent(line) <= parent_indent).then_some(start + 1 + offset)
+        })
+        .unwrap_or(lines.len())
+}
+
+fn patch_inline_hermes_enabled(lines: &mut [String], enabled_idx: usize) {
+    let raw = yaml_line_without_ending(&lines[enabled_idx]);
+    let indent = yaml_indent(&lines[enabled_idx]);
+    let values = raw
+        .split_once(':')
+        .map(|(_, value)| value.trim())
+        .unwrap_or_default();
+    let items = values
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .map(|value| {
+            value
+                .split(',')
+                .filter_map(normalized_yaml_scalar)
+                .filter(|item| item != HERMES_PLUGIN_NAME)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let mut replacement = format!("{}enabled:\n", " ".repeat(indent));
+    for item in items {
+        replacement.push_str(&format!("{}- {}\n", " ".repeat(indent + 2), item));
+    }
+    replacement.push_str(&format!(
+        "{}- {}\n",
+        " ".repeat(indent + 2),
+        HERMES_PLUGIN_NAME
+    ));
+    lines[enabled_idx] = replacement;
+}
+
+fn patch_block_hermes_enabled(lines: &mut Vec<String>, enabled_idx: usize) {
+    let enabled_indent = yaml_indent(&lines[enabled_idx]);
+    let enabled_end = yaml_block_end(lines, enabled_idx, enabled_indent);
+    let rtk_entry = format!(
+        "{}- {}\n",
+        " ".repeat(enabled_indent + 2),
+        HERMES_PLUGIN_NAME
+    );
+
+    let mut patched = Vec::with_capacity(lines.len() + 1);
+    patched.extend_from_slice(&lines[..=enabled_idx]);
+    patched.extend(
+        lines[enabled_idx + 1..enabled_end]
+            .iter()
+            .filter(|line| !is_yaml_list_item_named(line, HERMES_PLUGIN_NAME))
+            .cloned(),
+    );
+    patched.push(rtk_entry);
+    patched.extend_from_slice(&lines[enabled_end..]);
+    *lines = patched;
+}
+
+fn yaml_line_without_ending(line: &str) -> &str {
+    line.trim_end_matches(['\r', '\n'])
+}
+
+fn yaml_indent(line: &str) -> usize {
+    yaml_line_without_ending(line)
+        .chars()
+        .take_while(|ch| ch.is_whitespace())
+        .count()
+}
+
+fn is_yaml_list_item_named(line: &str, expected: &str) -> bool {
+    let trimmed = yaml_line_without_ending(line).trim();
+    let Some(item) = trimmed.strip_prefix("- ") else {
+        return false;
+    };
+
+    normalized_yaml_scalar(item).is_some_and(|item| item == expected)
+}
+
+fn normalized_yaml_scalar(value: &str) -> Option<String> {
+    let without_comment = value.split_once('#').map_or(value, |(item, _)| item);
+    let trimmed = without_comment.trim().trim_matches(['\'', '"']);
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
 fn run_codex_mode(global: bool, verbose: u8) -> Result<()> {
     let (agents_md_path, rtk_md_path) = if global {
         let codex_dir = resolve_codex_dir()?;
@@ -2955,6 +3185,78 @@ More notes
         run_antigravity_mode_at(temp.path(), 0).unwrap();
         let second = fs::read_to_string(&path).unwrap();
         assert_eq!(first, second, "Idempotent: content should not change");
+    }
+
+    #[test]
+    fn test_hermes_mode_creates_plugin_files() {
+        let temp = TempDir::new().unwrap();
+        run_hermes_mode_at(temp.path(), 0).unwrap();
+
+        let plugin_dir = temp.path().join("plugins/rtk-rewrite");
+        let init_path = plugin_dir.join("__init__.py");
+        let manifest_path = plugin_dir.join("plugin.yaml");
+        let config_path = temp.path().join("config.yaml");
+
+        assert!(init_path.exists(), "Python plugin should be created");
+        assert!(manifest_path.exists(), "Plugin manifest should be created");
+        assert_eq!(
+            fs::read_to_string(&init_path).unwrap(),
+            include_str!("../../hermes/rtk-rewrite/__init__.py")
+        );
+        assert_eq!(
+            fs::read_to_string(&manifest_path).unwrap(),
+            include_str!("../../hermes/rtk-rewrite/plugin.yaml")
+        );
+
+        let config = fs::read_to_string(&config_path).unwrap();
+        assert!(config.contains("plugins:\n"));
+        assert!(config.contains("  enabled:\n"));
+        assert_eq!(config.matches("rtk-rewrite").count(), 1);
+    }
+
+    #[test]
+    fn test_hermes_mode_preserves_config_and_is_idempotent() {
+        let temp = TempDir::new().unwrap();
+        let config_path = temp.path().join("config.yaml");
+        fs::write(
+            &config_path,
+            "theme: dark\nplugins:\n  enabled:\n    - existing-plugin\n  search_path: ./plugins\nother: true\n",
+        )
+        .unwrap();
+
+        run_hermes_mode_at(temp.path(), 0).unwrap();
+        let first = fs::read_to_string(&config_path).unwrap();
+        run_hermes_mode_at(temp.path(), 0).unwrap();
+        let second = fs::read_to_string(&config_path).unwrap();
+
+        assert_eq!(first, second, "Hermes config patch should be idempotent");
+        assert!(first.contains("theme: dark\n"));
+        assert!(first.contains("    - existing-plugin\n"));
+        assert!(first.contains("  search_path: ./plugins\n"));
+        assert!(first.contains("other: true\n"));
+        assert_eq!(first.matches("rtk-rewrite").count(), 1);
+    }
+
+    #[test]
+    fn test_hermes_config_patch_adds_missing_enabled_list() {
+        let existing = "theme: dark\nplugins:\n  search_path: ./plugins\nother: true\n";
+        let patched = patch_hermes_config(existing);
+
+        assert!(patched.contains("theme: dark\n"));
+        assert!(patched.contains("plugins:\n"));
+        assert!(patched.contains("  search_path: ./plugins\n"));
+        assert!(patched.contains("  enabled:\n    - rtk-rewrite\n"));
+        assert!(patched.contains("other: true\n"));
+        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+    }
+
+    #[test]
+    fn test_hermes_config_patch_removes_duplicate_rtk_rewrite() {
+        let existing = "plugins:\n  enabled:\n    - rtk-rewrite\n    - other\n    - rtk-rewrite\n";
+        let patched = patch_hermes_config(existing);
+
+        assert!(patched.contains("    - other\n"));
+        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
     }
 
     #[test]

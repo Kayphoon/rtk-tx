@@ -44,6 +44,8 @@ pub enum AgentTarget {
     Kilocode,
     /// Google Antigravity
     Antigravity,
+    /// Hermes CLI
+    Hermes,
 }
 
 #[derive(Parser)]
@@ -1785,6 +1787,8 @@ fn run_cli() -> Result<i32> {
                     );
                 }
                 hooks::init::run_antigravity_mode(cli.verbose)?;
+            } else if agent == Some(AgentTarget::Hermes) {
+                hooks::init::run_hermes_mode(cli.verbose)?;
             } else {
                 let install_opencode = opencode;
                 let install_claude = !opencode;
@@ -2566,6 +2570,17 @@ mod tests {
     fn test_try_parse_valid_git_status() {
         let result = Cli::try_parse_from(["rtk", "git", "status"]);
         assert!(result.is_ok(), "git status should parse successfully");
+    }
+
+    #[test]
+    fn test_try_parse_init_agent_hermes() {
+        let cli = Cli::try_parse_from(["rtk", "init", "--agent", "hermes"]).unwrap();
+        match cli.command {
+            Commands::Init { agent, .. } => {
+                assert_eq!(agent, Some(AgentTarget::Hermes));
+            }
+            _ => panic!("Expected Init command"),
+        }
     }
 
     #[test]

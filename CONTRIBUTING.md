@@ -246,8 +246,22 @@ For how to write tests (fixtures, snapshots, token savings verification), see [d
 |------|-------|----------|
 | **Unit tests** | `#[cfg(test)] mod tests` in each module | `cargo test` |
 | **Snapshot tests** | `assert_snapshot!()` via `insta` crate | `cargo test` + `cargo insta review` |
-| **Smoke tests** | `scripts/test-all.sh` (69 assertions) | `bash scripts/test-all.sh` |
+| **Smoke tests** | `scripts/test-all.sh` (150+ assertions) | `bash scripts/test-all.sh` |
 | **Integration tests** | `#[ignore]` tests requiring installed binary | `cargo test --ignored` |
+
+### Integration Test Requirement
+
+New features **must** include smoke test coverage in `scripts/test-all.sh`. This script is executed by the CI integration workflow on every develop-to-master PR and can be triggered manually via workflow dispatch.
+
+For new commands/filters, add at minimum:
+- `assert_help` for `--help` output
+- `assert_ok` for basic execution
+- `assert_contains` or `assert_output_contains` for expected output content
+
+For pipeline/transparency-critical features, add:
+- Exit code propagation tests (exact code, not just non-zero)
+- Stdin/stderr transparency tests where applicable
+- Passthrough equivalence tests (compare with raw command output)
 
 ### Pre-Commit Gate (mandatory)
 

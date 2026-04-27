@@ -1,0 +1,141 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  integration:
+    name: integration (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'develop'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Install binary to PATH
+        run: |
+          sudo cp target/release/rtk /usr/local/bin/rtk
+          rtk --version
+
+      - name: Install system tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y tree
+
+      - name: Install system tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install tree
+
+      - name: Install Python tools
+        run: pip install ruff pytest mypy
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install Go tools
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Run ignored integration tests
+        run: cargo test --ignored
+
+      - name: Run smoke test suite
+        run: |
+          export RTK_REPORT_FILE="rtk-report.md"
+          bash scripts/test-all.sh || true
+          if [ ! -f "$RTK_REPORT_FILE" ]; then
+            echo "Report file not generated"
+            exit 1
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.os }}
+          path: rtk-report.md
+
+      - name: Fail if tests failed
+        run: grep -q ":x:" rtk-report.md && exit 1 || exit 0
+
+  comment:
+    name: PR comment
+    needs: integration
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: report-*
+          merge-multiple: false
+
+      - name: Build and post PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          MARKER="<!-- rtk-integration-results -->"
+
+          # Parse each platform report into a combined comment
+          {
+            echo "${MARKER}"
+            echo "## RTK Integration Test Results"
+            echo ""
+            echo "Commit: \`${{ github.event.pull_request.head.sha }}\`"
+            echo ""
+
+            for dir in report-*/; do
+              platform=$(echo "$dir" | sed 's/report-//;s/\///')
+              report="${dir}rtk-report.md"
+              if [ -f "$report" ]; then
+                echo "### ${platform}"
+                echo ""
+                # Skip the HTML marker and title from individual reports
+                tail -n +3 "$report"
+                echo ""
+                echo "---"
+                echo ""
+              else
+                echo "### ${platform}"
+                echo ""
+                echo ":warning: Report not available (job may have failed to build)"
+                echo ""
+                echo "---"
+                echo ""
+              fi
+            done
+          } > combined-report.md
+
+          BODY=$(cat combined-report.md)
+
+          # Find existing comment with our marker
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" 2>/dev/null | head -1)
+
+          if [ -n "$COMMENT_ID" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              -X PATCH -f body="$BODY"
+          else
+            gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              -f body="$BODY"
+          fi

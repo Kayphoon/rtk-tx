@@ -108,7 +108,7 @@ jobs:
         id: release
         with:
           release-type: rust
-          package-name: rtk
+          package-name: rtk-tx
 
   build-release:
     name: Build and upload release assets

@@ -14,8 +14,8 @@ Comprehensive documentation for RTK's token savings tracking system.
 
 ## Overview
 
-RTK's tracking system records every command execution to provide analytics on token savings. The system:
-- Stores command history in SQLite (~/.local/share/rtk/tracking.db)
+RTK's tracking system records every command execution locally to provide analytics on token savings. The system:
+- Stores command history in SQLite (`~/.local/share/rtk-tx/history.db` by default)
 - Tracks input/output tokens, savings percentage, and execution time
 - Automatically cleans up records older than 90 days
 - Provides aggregation APIs (daily/weekly/monthly)
@@ -36,7 +36,7 @@ TimedExecution::track(original_cmd, rtk_cmd, input, output)
   ↓
 Tracker::record(original_cmd, rtk_cmd, input_tokens, output_tokens, exec_time_ms)
   ↓
-SQLite database (~/.local/share/rtk/tracking.db)
+SQLite database (~/.local/share/rtk-tx/history.db)
   ↓
 Aggregation APIs (get_summary, get_all_days, etc.)
   ↓
@@ -45,9 +45,11 @@ CLI output (rtk gain) or JSON/CSV export
 
 ### Storage Location
 
-- **Linux**: `~/.local/share/rtk/tracking.db`
-- **macOS**: `~/Library/Application Support/rtk/tracking.db`
-- **Windows**: `%APPDATA%\rtk\tracking.db`
+- **Linux**: `~/.local/share/rtk-tx/history.db`
+- **macOS**: `~/Library/Application Support/rtk-tx/history.db`
+- **Windows**: `%APPDATA%\rtk-tx\history.db`
+
+Override the database path with `RTK_TX_DB_PATH=/custom/path/history.db`. The legacy `RTK_DB_PATH` variable is accepted only as a deprecated fallback when `RTK_TX_DB_PATH` is unset.
 
 ### Data Retention
 
@@ -368,19 +370,22 @@ jobs:
   track-savings:
     runs-on: ubuntu-latest
     steps:
-      - name: Install RTK
-        run: cargo install --git https://github.com/rtk-ai/rtk
+      - name: Check out rtk-tx fork source
+        uses: actions/checkout@v4
+
+      - name: Install rtk-tx from local source
+        run: cargo install --path .
 
       - name: Export weekly stats
         run: |
-          rtk gain --weekly --format json > rtk-weekly.json
-          cat rtk-weekly.json
+          rtk-tx gain --weekly --format json > rtk-tx-weekly.json
+          cat rtk-tx-weekly.json
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: rtk-metrics
-          path: rtk-weekly.json
+          name: rtk-tx-metrics
+          path: rtk-tx-weekly.json
 
       - name: Post to Slack
         if: success()
@@ -539,8 +544,8 @@ let _ = conn.execute(
 ## Security & Privacy
 
 - **Local storage only**: Tracking database never leaves the machine
-- **Telemetry requires consent**: RTK can send a daily anonymous usage ping (version, OS, command counts, token savings). Disabled by default, requires explicit consent via `rtk init` or `rtk telemetry enable`. Manage with `rtk telemetry status/disable/forget`. Override: `RTK_TELEMETRY_DISABLED=1`
-- **User control**: Users can delete `~/.local/share/rtk/tracking.db` anytime
+- **Remote telemetry disabled**: rtk-tx v1 sends no daily ping and no server erasure requests. Local tracking stays on-device.
+- **User control**: Users can delete `~/.local/share/rtk-tx/history.db` anytime
 - **90-day retention**: Old data automatically purged
 
 ## Troubleshooting
@@ -549,15 +554,15 @@ let _ = conn.execute(
 
 If you see "database is locked" errors:
 - Ensure only one RTK process writes at a time
-- Check file permissions on `~/.local/share/rtk/tracking.db`
-- Delete and recreate: `rm ~/.local/share/rtk/tracking.db && rtk gain`
+- Check file permissions on `~/.local/share/rtk-tx/history.db`
+- Delete and recreate: `rm ~/.local/share/rtk-tx/history.db && rtk-tx gain`
 
 ### Missing exec_time_ms column
 
 Older databases may not have the `exec_time_ms` column. RTK automatically migrates on first use, but you can force it:
 
 ```bash
-sqlite3 ~/.local/share/rtk/tracking.db \
+sqlite3 ~/.local/share/rtk-tx/history.db \
   "ALTER TABLE commands ADD COLUMN exec_time_ms INTEGER DEFAULT 0"
 ```
 

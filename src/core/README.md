@@ -28,7 +28,7 @@ The TOML DSL applies 8 stages in order:
 
 Three-tier filter lookup (first match wins):
 1. `.rtk/filters.toml` (project-local, requires `rtk trust`)
-2. `~/.config/rtk/filters.toml` (user-global)
+2. `~/.config/rtk-tx/filters.toml` (user-global)
 3. Built-in filters concatenated by `build.rs` at compile time
 
 ## Tracking Database Schema
@@ -64,7 +64,7 @@ Project-scoped queries use GLOB patterns (not LIKE) to avoid `_`/`%` wildcard is
 [tracking]
 enabled = true
 history_days = 90
-database_path = "/custom/path/to/tracking.db"  # Optional
+database_path = "/custom/path/to/history.db"  # Optional; RTK_TX_DB_PATH env wins
 
 [display]
 colors = true
@@ -79,7 +79,7 @@ max_file_size = 1048576
 directory = "/custom/tee/dir"
 
 [telemetry]
-enabled = true
+enabled = false  # remote telemetry is disabled/absent in rtk-tx v1
 
 [hooks]
 exclude_commands = ["curl", "playwright"]  # Never auto-rewrite these

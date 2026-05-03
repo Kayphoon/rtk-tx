@@ -11,12 +11,12 @@ sidebar:
 
 | Platform | Path |
 |----------|------|
-| Linux | `~/.config/rtk/config.toml` |
-| macOS | `~/Library/Application Support/rtk/config.toml` |
+| Linux | `~/.config/rtk-tx/config.toml` |
+| macOS | `~/Library/Application Support/rtk-tx/config.toml` |
 
 ```bash
-rtk config            # show current configuration
-rtk config --create   # create config file with defaults
+rtk-tx config            # show current configuration
+rtk-tx config --create   # create config file with defaults
 ```
 
 ## Full config structure
@@ -45,7 +45,7 @@ max_files = 20              # rotation: keep last N files
 # directory = "/custom/tee/path"  # optional override
 
 [telemetry]
-enabled = true              # anonymous daily ping — see Telemetry & Privacy for full details
+enabled = false             # remote telemetry is disabled/absent in rtk-tx v1
 
 [hooks]
 exclude_commands = []       # commands to never auto-rewrite
@@ -58,8 +58,10 @@ For full details on what is collected, opt-out options, and GDPR rights, see [Te
 | Variable | Description |
 |----------|-------------|
 | `RTK_DISABLED=1` | Disable RTK for a single command (`RTK_DISABLED=1 git status`) |
+| `RTK_TX_DB_PATH` | Override the local SQLite tracking database path |
+| `RTK_DB_PATH` | Deprecated legacy fallback for the local tracking database path |
 | `RTK_TEE_DIR` | Override the tee directory |
-| `RTK_TELEMETRY_DISABLED=1` | Disable telemetry |
+| `RTK_TELEMETRY_DISABLED=1` | Harmless explicit telemetry block; remote telemetry is already disabled |
 | `RTK_HOOK_AUDIT=1` | Enable hook audit logging |
 | `SKIP_ENV_VALIDATION=1` | Skip env validation (useful with Next.js) |
 
@@ -69,7 +71,7 @@ When a command fails, RTK saves the full raw output to a local file and prints t
 
 ```
 FAILED: 2/15 tests
-[full output: ~/.local/share/rtk/tee/1707753600_cargo_test.log]
+[full output: ~/.local/share/rtk-tx/tee/1707753600_cargo_test.log]
 ```
 
 Your AI assistant can then read the file if it needs more detail, without re-running the command.
@@ -110,13 +112,24 @@ Or for a single invocation:
 RTK_DISABLED=1 git rebase main
 ```
 
+## CodeBuddy settings
+
+CodeBuddy Code setup uses its own settings files:
+
+| Scope | Path |
+|-------|------|
+| Project | `<project-root>/.codebuddy/settings.json` |
+| Global | `~/.codebuddy/settings.json` |
+
+Install with `rtk-tx init --codebuddy` for project scope or `rtk-tx init -g --codebuddy` for global scope. The inserted hook uses `hooks.PreToolUse`, matcher `Bash`, command `rtk-tx hook codebuddy`, and returns rewrites through `hookSpecificOutput.updatedInput.command` (for example, `rtk-tx rewrite "git status"` → `rtk-tx git status`).
+
+`rtk-tx` v1 does **not** patch `.codebuddy/settings.local.json`. After external settings changes, CodeBuddy may require review/approval in its `/hooks` panel.
+
 ## Telemetry
 
-RTK sends one anonymous ping per day (23h interval). No personal data, no file paths, no command content.
+rtk-tx v1 sends no remote telemetry. Local SQLite tracking for `rtk-tx gain` stays on-device.
 
-Data sent: device hash, version, OS, architecture, command count/24h, top commands, savings %.
-
-To opt out:
+To set an explicit block or disable local consent state:
 
 ```bash
 # Via environment variable

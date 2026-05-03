@@ -116,21 +116,22 @@ Savings %     = (Saved / Input) × 100
 
 Savings data is stored locally in SQLite:
 
-- **Location**: `~/.local/share/rtk/history.db` (Linux / macOS)
+- **Location**: `~/.local/share/rtk-tx/history.db` (Linux / macOS)
 - **Retention**: 90 days (automatic cleanup)
 - **Scope**: Global across all projects and Claude sessions
+- **Override**: `RTK_TX_DB_PATH=/custom/path/history.db` (`RTK_DB_PATH` is a deprecated fallback)
 
 ```bash
 # Inspect raw data
-sqlite3 ~/.local/share/rtk/history.db \
+sqlite3 ~/.local/share/rtk-tx/history.db \
   "SELECT timestamp, rtk_cmd, saved_tokens FROM commands
    ORDER BY timestamp DESC LIMIT 10"
 
 # Backup
-cp ~/.local/share/rtk/history.db ~/backups/rtk-history-$(date +%Y%m%d).db
+cp ~/.local/share/rtk-tx/history.db ~/backups/rtk-history-$(date +%Y%m%d).db
 
 # Reset
-rm ~/.local/share/rtk/history.db    # recreated on next command
+rm ~/.local/share/rtk-tx/history.db    # recreated on next command
 ```
 
 ## Analysis workflows
@@ -171,9 +172,9 @@ jobs:
   stats:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - run: cargo install rtk
-      - run: rtk gain --weekly --format json > stats/week-$(date +%Y-%W).json
+      - uses: actions/checkout@v4
+      - run: cargo install --path .
+      - run: rtk-tx gain --weekly --format json > stats/week-$(date +%Y-%W).json
       - run: git add stats/ && git commit -m "Weekly rtk stats" && git push
 ```
 
@@ -198,8 +199,8 @@ The tiers (`pro`, `5x`, `20x`) correspond to Anthropic Claude API subscription l
 
 **No data showing:**
 ```bash
-ls -lh ~/.local/share/rtk/history.db
-sqlite3 ~/.local/share/rtk/history.db "SELECT COUNT(*) FROM commands"
+ls -lh ~/.local/share/rtk-tx/history.db
+sqlite3 ~/.local/share/rtk-tx/history.db "SELECT COUNT(*) FROM commands"
 git status    # run any tracked command to generate data
 ```
 

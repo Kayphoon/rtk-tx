@@ -12,16 +12,17 @@ sidebar:
 **Symptom:**
 ```bash
 $ rtk gain
-rtk: 'gain' is not a rtk command. See 'rtk --help'.
+rtk-tx: 'gain' is not an rtk-tx command. See 'rtk-tx --help'.
 ```
 
 **Cause:** You installed **Rust Type Kit** (`reachingforthejack/rtk`) instead of **Rust Token Killer** (`rtk-ai/rtk`). They share the same binary name.
 
 **Fix:**
 ```bash
-cargo uninstall rtk
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
-rtk gain    # should now show token savings stats
+cargo uninstall rtk-tx
+# From a local rtk-tx fork checkout
+cargo install --path . --force
+rtk-tx gain    # should now show token savings stats
 ```
 
 ## How to tell which rtk you have
@@ -39,22 +40,22 @@ rtk gain    # should now show token savings stats
 
 1. Verify RTK is installed:
    ```bash
-   rtk --version
-   rtk gain
+   rtk-tx --version
+   rtk-tx gain
    ```
 
 2. Initialize the hook:
    ```bash
-   rtk init --global    # Claude Code
-   rtk init --global --cursor    # Cursor
-   rtk init --global --opencode  # OpenCode
+   rtk-tx init --global    # Claude Code
+   rtk-tx init --global --cursor    # Cursor
+   rtk-tx init --global --opencode  # OpenCode
    ```
 
 3. Restart your AI assistant.
 
 4. Verify hook status:
    ```bash
-   rtk init --show
+   rtk-tx init --show
    ```
 
 5. Check `settings.json` has the hook registered (Claude Code):
@@ -66,8 +67,8 @@ rtk gain    # should now show token savings stats
 
 **Symptom:**
 ```bash
-$ rtk --version
-zsh: command not found: rtk
+$ rtk-tx --version
+zsh: command not found: rtk-tx
 ```
 
 **Cause:** `~/.cargo/bin` is not in your PATH.
@@ -87,51 +88,51 @@ set -gx PATH $HOME/.cargo/bin $PATH
 Then reload:
 ```bash
 source ~/.zshrc    # or ~/.bashrc
-rtk --version
+rtk-tx --version
 ```
 
 ## RTK on Windows
 
-### Double-clicking rtk.exe does nothing
+### Double-clicking rtk-tx.exe does nothing
 
-**Symptom:** You double-click `rtk.exe`, a terminal flashes and closes instantly.
+**Symptom:** You double-click `rtk-tx.exe`, a terminal flashes and closes instantly.
 
 **Cause:** RTK is a command-line tool. With no arguments, it prints usage and exits. The console window opens and closes before you can read anything.
 
 **Fix:** Open a terminal first, then run RTK from there:
 - Press `Win+R`, type `cmd`, press Enter
 - Or open PowerShell or Windows Terminal
-- Then run: `rtk --version`
+- Then run: `rtk-tx --version`
 
 ### Hook not working (no auto-rewrite)
 
-**Symptom:** `rtk init -g` shows "Falling back to --claude-md mode" on Windows.
+**Symptom:** `rtk-tx init -g` shows "Falling back to --claude-md mode" on Windows.
 
 **Cause:** The auto-rewrite hook (`rtk-rewrite.sh`) requires a Unix shell. Native Windows doesn't have one.
 
 **Fix:** Use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) for full hook support:
 ```bash
-# Inside WSL
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-rtk init -g    # full hook mode works in WSL
+# Inside WSL, from a local rtk-tx fork checkout
+cargo install --path . --force
+rtk-tx init -g    # full hook mode works in WSL
 ```
 
-On native Windows, RTK falls back to CLAUDE.md injection. Your AI assistant gets RTK instructions but won't auto-rewrite commands. It can still use RTK manually: `rtk cargo test`, `rtk git status`, etc.
+On native Windows, rtk-tx falls back to CLAUDE.md injection. Your AI assistant gets rtk-tx instructions but won't auto-rewrite commands. It can still use rtk-tx manually: `rtk-tx cargo test`, `rtk-tx git status`, etc.
 
 ### Node.js tools not found
 
 **Symptom:**
 ```
-rtk vitest --run
+rtk-tx vitest --run
 Error: program not found
 ```
 
 **Cause:** On Windows, Node.js tools are installed as `.CMD`/`.BAT` wrappers. Older RTK versions couldn't find them.
 
-**Fix:** Update to RTK v0.23.1+:
+**Fix:** Reinstall rtk-tx from the local fork checkout:
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk
-rtk --version    # should be 0.23.1+
+cargo install --path . --force
+rtk-tx --version    # should be 0.23.1+
 ```
 
 ## Compilation error during installation
@@ -149,19 +150,19 @@ Minimum required Rust version: 1.70+.
 ## OpenCode not using RTK
 
 ```bash
-rtk init --global --opencode
+rtk-tx init --global --opencode
 # restart OpenCode
-rtk init --show    # should show "OpenCode: plugin installed"
+rtk-tx init --show    # should show "OpenCode: plugin installed"
 ```
 
-## `cargo install rtk` installs the wrong package
+## Registry or upstream install commands install the wrong package
 
-If Rust Type Kit is published to crates.io under the name `rtk`, `cargo install rtk` may install the wrong one.
+If another package is published under a similar name, registry-based installs may install the wrong one for this fork.
 
-Always use the explicit URL:
+Use the local rtk-tx fork checkout instead:
 
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --path . --force
 ```
 
 ## Run the diagnostic script

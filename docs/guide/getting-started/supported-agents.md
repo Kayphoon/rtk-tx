@@ -1,6 +1,6 @@
 ---
 title: Supported Agents
-description: How to integrate RTK with Claude Code, Cursor, Copilot, Cline, Windsurf, Codex, OpenCode, Kilo Code, and Antigravity
+description: How to integrate RTK with Claude Code, CodeBuddy, Cursor, Copilot, Cline, Windsurf, Codex, OpenCode, Hermes, Kilo Code, and Antigravity
 sidebar:
   order: 3
 ---
@@ -11,15 +11,15 @@ RTK supports all major AI coding agents across 3 integration tiers. Mistral Vibe
 
 ## How it works
 
-Each agent integration intercepts CLI commands before execution and rewrites them to their RTK equivalent. The agent runs `rtk cargo test` instead of `cargo test`, sees filtered output, and uses up to 90% fewer tokens — without any change to your workflow.
+Each agent integration intercepts CLI commands before execution and rewrites them to their RTK equivalent. The agent runs `rtk-tx cargo test` instead of `cargo test`, sees filtered output, and uses up to 90% fewer tokens — without any change to your workflow.
 
-All rewrite logic lives in the RTK binary (`rtk rewrite`). Agent hooks are thin delegates that parse the agent-specific JSON format and call `rtk rewrite` for the actual decision.
+All rewrite logic lives in the RTK binary (`rtk-tx rewrite`). Agent hooks are thin delegates that parse the agent-specific JSON format and call `rtk-tx rewrite` for the actual decision.
 
 ```
 Agent runs "cargo test"
   -> Hook intercepts (PreToolUse / plugin event)
-  -> Calls rtk rewrite "cargo test"
-  -> Returns "rtk cargo test"
+  -> Calls rtk-tx rewrite "cargo test"
+  -> Returns "rtk-tx cargo test"
   -> Agent executes filtered command
   -> LLM sees 90% fewer tokens
 ```
@@ -29,12 +29,14 @@ Agent runs "cargo test"
 | Agent | Integration tier | Can rewrite transparently? |
 |-------|-----------------|---------------------------|
 | Claude Code | Shell hook (`PreToolUse`) | Yes |
+| CodeBuddy Code | Rust binary (`rtk-tx hook codebuddy`) with Claude-compatible `PreToolUse` | Yes |
 | VS Code Copilot Chat | Shell hook (`PreToolUse`) | Yes |
 | GitHub Copilot CLI | Shell hook (deny-with-suggestion) | No (agent retries) |
 | Cursor | Shell hook (`preToolUse`) | Yes |
 | Gemini CLI | Rust binary (`BeforeTool`) | Yes |
 | OpenCode | TypeScript plugin (`tool.execute.before`) | Yes |
 | OpenClaw | TypeScript plugin (`before_tool_call`) | Yes |
+| Hermes | Python plugin (`terminal` command mutation) | Yes |
 | Cline / Roo Code | Rules file (prompt-level) | N/A |
 | Windsurf | Rules file (prompt-level) | N/A |
 | Codex CLI | AGENTS.md instructions | N/A |
@@ -47,19 +49,31 @@ Agent runs "cargo test"
 ### Claude Code
 
 ```bash
-rtk init --global    # installs hook + patches settings.json
+rtk-tx init --global    # installs hook + patches settings.json
 ```
 
 Restart Claude Code. Verify:
 
 ```bash
-rtk init --show    # shows hook status
+rtk-tx init --show    # shows hook status
 ```
+
+### CodeBuddy Code
+
+```bash
+rtk-tx init --codebuddy       # project: <project-root>/.codebuddy/settings.json
+rtk-tx init -g --codebuddy    # global: ~/.codebuddy/settings.json
+rtk-tx hook codebuddy         # native hook adapter used by settings
+```
+
+CodeBuddy Code hooks are Claude-compatible. `rtk-tx` writes `hooks.PreToolUse` with matcher `Bash` and command `rtk-tx hook codebuddy`; the adapter emits rewrites through `hookSpecificOutput.updatedInput.command`. Direct check: `rtk-tx rewrite "git status"` → `rtk-tx git status`.
+
+`rtk-tx` v1 patches `<project-root>/.codebuddy/settings.json` for project setup and `~/.codebuddy/settings.json` for global setup. It does **not** patch `.codebuddy/settings.local.json`. After external settings changes, CodeBuddy may require review/approval in its `/hooks` panel before the hook runs.
 
 ### Cursor
 
 ```bash
-rtk init --global --cursor
+rtk-tx init --global --cursor
 ```
 
 Restart Cursor. The hook uses `preToolUse` with Cursor's `updated_input` format.
@@ -67,19 +81,19 @@ Restart Cursor. The hook uses `preToolUse` with Cursor's `updated_input` format.
 ### VS Code Copilot Chat
 
 ```bash
-rtk init --global --copilot
+rtk-tx init --global --copilot
 ```
 
 ### Gemini CLI
 
 ```bash
-rtk init --global --gemini
+rtk-tx init --global --gemini
 ```
 
 ### OpenCode
 
 ```bash
-rtk init --global --opencode
+rtk-tx init --global --opencode
 ```
 
 Creates `~/.config/opencode/plugins/rtk.ts`. Uses the `tool.execute.before` hook.
@@ -90,43 +104,53 @@ Creates `~/.config/opencode/plugins/rtk.ts`. Uses the `tool.execute.before` hook
 openclaw plugins install ./openclaw
 ```
 
-Plugin in the `openclaw/` directory. Uses the `before_tool_call` hook, delegates to `rtk rewrite`.
+Plugin in the `openclaw/` directory. Uses the `before_tool_call` hook, delegates to `rtk-tx rewrite`.
+
+### Hermes
+
+```bash
+rtk-tx init --agent hermes
+```
+
+Creates `~/.hermes/plugins/rtk-rewrite/` and enables it through `plugins.enabled` in the Hermes config. Hermes loads Python plugins, so the plugin entrypoint is Python, but it is only a thin adapter. It mutates the Hermes `terminal` tool `command` before execution and delegates all rewrite decisions to Rust through `rtk-tx rewrite`.
+
+The plugin fails open. If `rtk-tx` is missing, `rtk-tx rewrite` errors, the tool is not `terminal`, the payload has no string `command`, or the plugin raises an exception, Hermes runs the original command unchanged. The same `rtk-tx rewrite` limitations apply: already-prefixed `rtk-tx` commands, compound shell commands, heredocs, and commands without filters are not rewritten.
 
 ### Cline / Roo Code
 
 ```bash
-rtk init --cline    # creates .clinerules in current project
+rtk-tx init --cline    # creates .clinerules in current project
 ```
 
-Cline reads `.clinerules` as custom instructions. RTK adds guidance telling Cline to prefer `rtk <cmd>` over raw commands.
+Cline reads `.clinerules` as custom instructions. RTK adds guidance telling Cline to prefer `rtk-tx <cmd>` over raw commands.
 
 ### Windsurf
 
 ```bash
-rtk init --windsurf    # creates .windsurfrules in current project
+rtk-tx init --windsurf    # creates .windsurfrules in current project
 ```
 
 ### Codex CLI
 
 ```bash
-rtk init --codex    # creates AGENTS.md or patches existing one
+rtk-tx init --codex    # creates AGENTS.md or patches existing one
 ```
 
 ### Kilo Code
 
 ```bash
-rtk init --agent kilocode    # creates .kilocode/rules/rtk-rules.md in current project
+rtk-tx init --agent kilocode    # creates .kilocode/rules/rtk-rules.md in current project
 ```
 
-Kilo Code reads `.kilocode/rules/` as custom instructions. RTK adds guidance telling Kilo Code to prefer `rtk <cmd>` over raw commands.
+Kilo Code reads `.kilocode/rules/` as custom instructions. RTK adds guidance telling Kilo Code to prefer `rtk-tx <cmd>` over raw commands.
 
 ### Google Antigravity
 
 ```bash
-rtk init --agent antigravity    # creates .agents/rules/antigravity-rtk-rules.md in current project
+rtk-tx init --agent antigravity    # creates .agents/rules/antigravity-rtk-rules.md in current project
 ```
 
-Antigravity reads `.agents/rules/` as custom instructions. RTK adds guidance telling Antigravity to prefer `rtk <cmd>` over raw commands.
+Antigravity reads `.agents/rules/` as custom instructions. RTK adds guidance telling Antigravity to prefer `rtk-tx <cmd>` over raw commands.
 
 ### Mistral Vibe (planned)
 
@@ -137,17 +161,17 @@ Support is blocked on upstream `BeforeToolCallback` ([mistral-vibe#531](https://
 | Tier | Mechanism | How rewrites work |
 |------|-----------|------------------|
 | **Full hook** | Shell script or Rust binary, intercepts via agent API | Transparent — agent never sees the raw command |
-| **Plugin** | TypeScript/JS in agent's plugin system | Transparent — in-place mutation |
+| **Plugin** | TypeScript, JavaScript, or Python in agent's plugin system | Transparent, in-place mutation when the agent allows it |
 | **Rules file** | Prompt-level instructions | Guidance only — agent is told to prefer `rtk <cmd>` |
 
-Rules file integrations (Cline, Windsurf, Codex, Kilo Code, Antigravity) rely on the model following instructions. Full hook integrations (Claude Code, Cursor, Gemini) are guaranteed — the command is rewritten before the agent sees it.
+Rules file integrations (Cline, Windsurf, Codex, Kilo Code, Antigravity) rely on the model following instructions. Full hook integrations (Claude Code, CodeBuddy, Cursor, Gemini) are guaranteed — the command is rewritten before the agent sees it.
 
 ## Windows support
 
 The shell hook (`rtk-rewrite.sh`) requires a Unix shell. On native Windows:
 
-- `rtk init -g` automatically falls back to **CLAUDE.md injection mode** (prompt-level instructions)
-- Filters work normally (`rtk cargo test`, `rtk git status`)
+- `rtk-tx init -g` automatically falls back to **CLAUDE.md injection mode** (prompt-level instructions)
+- Filters work normally (`rtk-tx cargo test`, `rtk-tx git status`)
 - Auto-rewrite does not work — the AI assistant is instructed to use RTK but commands are not intercepted
 
 For full hook support on Windows, use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install). Inside WSL, all agents with shell hook integration (Claude Code, Cursor, Gemini) work identically to Linux.
@@ -167,7 +191,7 @@ Hooks never block command execution. If RTK is missing, the hook exits cleanly a
 RTK_DISABLED=1 git status    # runs raw git status, no rewrite
 ```
 
-Or exclude commands permanently in `~/.config/rtk/config.toml`:
+Or exclude commands permanently in `~/.config/rtk-tx/config.toml`:
 
 ```toml
 [hooks]

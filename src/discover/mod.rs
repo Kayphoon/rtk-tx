@@ -167,8 +167,9 @@ pub fn run(
                         bucket.count += 1;
                     }
                     Classification::Ignored => {
-                        // Check if it starts with "rtk "
-                        if part.trim().starts_with("rtk ") {
+                        // Check if it is already wrapped with the product binary.
+                        let trimmed = part.trim();
+                        if trimmed.starts_with("rtk-tx ") || trimmed.starts_with("rtk ") {
                             already_rtk += 1;
                         }
                         // Otherwise just skip

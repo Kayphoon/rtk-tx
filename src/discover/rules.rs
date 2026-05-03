@@ -13,7 +13,7 @@ pub struct RtkRule {
 pub const RULES: &[RtkRule] = &[
     RtkRule {
         pattern: r"^(?:git|yadm)\s+(?:-[Cc]\s+\S+\s+)*(status|log|diff|show|add|commit|push|pull|branch|fetch|stash|worktree)",
-        rtk_cmd: "rtk git",
+        rtk_cmd: "rtk-tx git",
         rewrite_prefixes: &["git", "yadm"],
         category: "Git",
         savings_pct: 70.0,
@@ -27,7 +27,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^gh\s+(pr|issue|run|repo|api|release)",
-        rtk_cmd: "rtk gh",
+        rtk_cmd: "rtk-tx gh",
         rewrite_prefixes: &["gh"],
         category: "GitHub",
         savings_pct: 82.0,
@@ -35,8 +35,17 @@ pub const RULES: &[RtkRule] = &[
         subcmd_status: &[],
     },
     RtkRule {
+        pattern: r"^glab\s+(mr|issue|ci|pipeline|api|release)",
+        rtk_cmd: "rtk-tx glab",
+        rewrite_prefixes: &["glab"],
+        category: "GitLab",
+        savings_pct: 82.0,
+        subcmd_savings: &[("mr", 87.0), ("ci", 82.0), ("issue", 80.0)],
+        subcmd_status: &[],
+    },
+    RtkRule {
         pattern: r"^cargo\s+(build|test|clippy|check|fmt|install)",
-        rtk_cmd: "rtk cargo",
+        rtk_cmd: "rtk-tx cargo",
         rewrite_prefixes: &["cargo"],
         category: "Cargo",
         savings_pct: 80.0,
@@ -45,7 +54,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^pnpm\s+(exec|i|install|list|ls|outdated|run|run-script)",
-        rtk_cmd: "rtk pnpm",
+        rtk_cmd: "rtk-tx pnpm",
         rewrite_prefixes: &["pnpm"],
         category: "PackageManager",
         savings_pct: 80.0,
@@ -53,8 +62,8 @@ pub const RULES: &[RtkRule] = &[
         subcmd_status: &[],
     },
     RtkRule {
-        pattern: r"^npm\s+(exec|run|run-script|rum|urn|x)\s+",
-        rtk_cmd: "rtk npm",
+        pattern: r"^npm\s+(exec|run|run-script|rum|urn|x)(\s|$)",
+        rtk_cmd: "rtk-tx npm",
         rewrite_prefixes: &["npm"],
         category: "PackageManager",
         savings_pct: 70.0,
@@ -63,7 +72,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^npx\s+",
-        rtk_cmd: "rtk npx",
+        rtk_cmd: "rtk-tx npx",
         rewrite_prefixes: &["npx"],
         category: "PackageManager",
         savings_pct: 70.0,
@@ -72,7 +81,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^(cat|head|tail)\s+",
-        rtk_cmd: "rtk read",
+        rtk_cmd: "rtk-tx read",
         rewrite_prefixes: &["cat", "head", "tail"],
         category: "Files",
         savings_pct: 60.0,
@@ -81,7 +90,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^(rg|grep)\s+",
-        rtk_cmd: "rtk grep",
+        rtk_cmd: "rtk-tx grep",
         rewrite_prefixes: &["rg", "grep"],
         category: "Files",
         savings_pct: 75.0,
@@ -90,7 +99,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^ls(\s|$)",
-        rtk_cmd: "rtk ls",
+        rtk_cmd: "rtk-tx ls",
         rewrite_prefixes: &["ls"],
         category: "Files",
         savings_pct: 65.0,
@@ -99,7 +108,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^find\s+",
-        rtk_cmd: "rtk find",
+        rtk_cmd: "rtk-tx find",
         rewrite_prefixes: &["find"],
         category: "Files",
         savings_pct: 70.0,
@@ -108,7 +117,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^((p?np(m|x)|p?npm\s+(exec|run|run-script)|npm\s+(rum|urn|x)|pnpm\s+dlx)\s+)?tsc(\s|$)",
-        rtk_cmd: "rtk tsc",
+        rtk_cmd: "rtk-tx tsc",
         rewrite_prefixes: &[
             "npm exec tsc",
             "npm rum tsc",
@@ -133,7 +142,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^((p?np(m|x)|p?npm\s+(exec|run|run-script)|npm\s+(rum|urn|x)|pnpm\s+dlx)\s+)?(biome|eslint|lint)(\s|$)",
-        rtk_cmd: "rtk lint",
+        rtk_cmd: "rtk-tx lint",
         rewrite_prefixes: &[
             "biome",
             "eslint",
@@ -184,7 +193,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^((p?np(m|x)|p?npm\s+(exec|run|run-script)|npm\s+(rum|urn|x)|pnpm\s+dlx)\s+)?prettier",
-        rtk_cmd: "rtk prettier",
+        rtk_cmd: "rtk-tx prettier",
         rewrite_prefixes: &[
             "npm exec prettier",
             "npm prettier",
@@ -209,7 +218,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^((p?np(m|x)|p?npm\s+(exec|run|run-script)|npm\s+(rum|urn|x)|pnpm\s+dlx)\s+)?next\s+build",
-        rtk_cmd: "rtk next",
+        rtk_cmd: "rtk-tx next",
         rewrite_prefixes: &[
             "next build",
             "npm exec next build",
@@ -234,7 +243,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^((p?np(m|x)|p?npm\s+(exec|run|run-script)|npm\s+(rum|urn|x)|pnpm\s+dlx)\s+)?jest(\s+run)?(\s|$)",
-        rtk_cmd: "rtk jest",
+        rtk_cmd: "rtk-tx jest",
         rewrite_prefixes: &[
             "jest run",
             "jest",
@@ -274,7 +283,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^((p?np(m|x)|p?npm\s+(exec|run|run-script)|npm\s+(rum|urn|x)|pnpm\s+dlx)\s+)?vitest(\s+run)?(\s|$)",
-        rtk_cmd: "rtk vitest",
+        rtk_cmd: "rtk-tx vitest",
         rewrite_prefixes: &[
             "npm exec vitest run",
             "npm exec vitest",
@@ -314,7 +323,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^((p?np(m|x)|p?npm\s+(exec|run|run-script)|npm\s+(rum|urn|x)|pnpm\s+dlx)\s+)?playwright",
-        rtk_cmd: "rtk playwright",
+        rtk_cmd: "rtk-tx playwright",
         rewrite_prefixes: &[
             "npm exec playwright",
             "npm playwright",
@@ -339,7 +348,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^((p?np(m|x)|p?npm\s+(exec|run|run-script)|npm\s+(rum|urn|x)|pnpm\s+dlx)\s+)?prisma",
-        rtk_cmd: "rtk prisma",
+        rtk_cmd: "rtk-tx prisma",
         rewrite_prefixes: &[
             "npm exec prisma",
             "npm prisma",
@@ -364,7 +373,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^docker\s+(ps|images|logs|run|exec|build|compose\s+(ps|logs|build))",
-        rtk_cmd: "rtk docker",
+        rtk_cmd: "rtk-tx docker",
         rewrite_prefixes: &["docker"],
         category: "Infra",
         savings_pct: 85.0,
@@ -373,7 +382,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^kubectl\s+(get|logs|describe|apply)",
-        rtk_cmd: "rtk kubectl",
+        rtk_cmd: "rtk-tx kubectl",
         rewrite_prefixes: &["kubectl"],
         category: "Infra",
         savings_pct: 85.0,
@@ -382,7 +391,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^tree(\s|$)",
-        rtk_cmd: "rtk tree",
+        rtk_cmd: "rtk-tx tree",
         rewrite_prefixes: &["tree"],
         category: "Files",
         savings_pct: 70.0,
@@ -391,7 +400,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^diff\s+",
-        rtk_cmd: "rtk diff",
+        rtk_cmd: "rtk-tx diff",
         rewrite_prefixes: &["diff"],
         category: "Files",
         savings_pct: 60.0,
@@ -400,7 +409,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^curl\s+",
-        rtk_cmd: "rtk curl",
+        rtk_cmd: "rtk-tx curl",
         rewrite_prefixes: &["curl"],
         category: "Network",
         savings_pct: 70.0,
@@ -409,7 +418,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^wget\s+",
-        rtk_cmd: "rtk wget",
+        rtk_cmd: "rtk-tx wget",
         rewrite_prefixes: &["wget"],
         category: "Network",
         savings_pct: 65.0,
@@ -418,7 +427,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^(python3?\s+-m\s+)?mypy(\s|$)",
-        rtk_cmd: "rtk mypy",
+        rtk_cmd: "rtk-tx mypy",
         rewrite_prefixes: &["python3 -m mypy", "python -m mypy", "mypy"],
         category: "Build",
         savings_pct: 80.0,
@@ -427,7 +436,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^ruff\s+(check|format)",
-        rtk_cmd: "rtk ruff",
+        rtk_cmd: "rtk-tx ruff",
         rewrite_prefixes: &["ruff"],
         category: "Python",
         savings_pct: 80.0,
@@ -436,7 +445,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^(python[0-9.]*\s+-m\s+)?pytest(\s|$)",
-        rtk_cmd: "rtk pytest",
+        rtk_cmd: "rtk-tx pytest",
         rewrite_prefixes: &["python3 -m pytest", "python -m pytest", "pytest"],
         category: "Python",
         savings_pct: 90.0,
@@ -445,7 +454,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^(pip3?|uv\s+pip)\s+(list|outdated|install|show)",
-        rtk_cmd: "rtk pip",
+        rtk_cmd: "rtk-tx pip",
         rewrite_prefixes: &["pip3", "pip", "uv pip"],
         category: "Python",
         savings_pct: 75.0,
@@ -454,7 +463,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^go\s+(test|build|vet)",
-        rtk_cmd: "rtk go",
+        rtk_cmd: "rtk-tx go",
         rewrite_prefixes: &["go"],
         category: "Go",
         savings_pct: 85.0,
@@ -463,7 +472,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^(?:golangci-lint|golangci)\s+(run)(?:\s|$)",
-        rtk_cmd: "rtk golangci-lint run",
+        rtk_cmd: "rtk-tx golangci-lint run",
         rewrite_prefixes: &["golangci-lint run", "golangci run"],
         category: "Go",
         savings_pct: 85.0,
@@ -472,7 +481,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^bundle\s+(install|update)\b",
-        rtk_cmd: "rtk bundle",
+        rtk_cmd: "rtk-tx bundle",
         rewrite_prefixes: &["bundle"],
         category: "Ruby",
         savings_pct: 70.0,
@@ -481,7 +490,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^(?:bundle\s+exec\s+)?(?:bin/)?(?:rake|rails)\s+test",
-        rtk_cmd: "rtk rake",
+        rtk_cmd: "rtk-tx rake",
         rewrite_prefixes: &[
             "bundle exec rails",
             "bundle exec rake",
@@ -496,7 +505,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^(?:bundle\s+exec\s+)?rspec(?:\s|$)",
-        rtk_cmd: "rtk rspec",
+        rtk_cmd: "rtk-tx rspec",
         rewrite_prefixes: &["bundle exec rspec", "bin/rspec", "rspec"],
         category: "Tests",
         savings_pct: 65.0,
@@ -505,7 +514,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^(?:bundle\s+exec\s+)?rubocop(?:\s|$)",
-        rtk_cmd: "rtk rubocop",
+        rtk_cmd: "rtk-tx rubocop",
         rewrite_prefixes: &["bundle exec rubocop", "rubocop"],
         category: "Build",
         savings_pct: 65.0,
@@ -514,7 +523,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^aws\s+",
-        rtk_cmd: "rtk aws",
+        rtk_cmd: "rtk-tx aws",
         rewrite_prefixes: &["aws"],
         category: "Infra",
         savings_pct: 80.0,
@@ -538,7 +547,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^psql(\s|$)",
-        rtk_cmd: "rtk psql",
+        rtk_cmd: "rtk-tx psql",
         rewrite_prefixes: &["psql"],
         category: "Infra",
         savings_pct: 75.0,
@@ -547,7 +556,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^ansible-playbook\b",
-        rtk_cmd: "rtk ansible-playbook",
+        rtk_cmd: "rtk-tx ansible-playbook",
         rewrite_prefixes: &["ansible-playbook"],
         category: "Infra",
         savings_pct: 70.0,
@@ -556,7 +565,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^brew\s+(install|upgrade)\b",
-        rtk_cmd: "rtk brew",
+        rtk_cmd: "rtk-tx brew",
         rewrite_prefixes: &["brew"],
         category: "PackageManager",
         savings_pct: 65.0,
@@ -565,7 +574,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^composer\s+(install|update|require)\b",
-        rtk_cmd: "rtk composer",
+        rtk_cmd: "rtk-tx composer",
         rewrite_prefixes: &["composer"],
         category: "PackageManager",
         savings_pct: 65.0,
@@ -574,7 +583,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^df(\s|$)",
-        rtk_cmd: "rtk df",
+        rtk_cmd: "rtk-tx df",
         rewrite_prefixes: &["df"],
         category: "System",
         savings_pct: 60.0,
@@ -583,7 +592,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^dotnet\s+build\b",
-        rtk_cmd: "rtk dotnet",
+        rtk_cmd: "rtk-tx dotnet",
         rewrite_prefixes: &["dotnet"],
         category: "Build",
         savings_pct: 70.0,
@@ -592,7 +601,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^du\b",
-        rtk_cmd: "rtk du",
+        rtk_cmd: "rtk-tx du",
         rewrite_prefixes: &["du"],
         category: "System",
         savings_pct: 60.0,
@@ -601,7 +610,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^fail2ban-client\b",
-        rtk_cmd: "rtk fail2ban-client",
+        rtk_cmd: "rtk-tx fail2ban-client",
         rewrite_prefixes: &["fail2ban-client"],
         category: "Infra",
         savings_pct: 60.0,
@@ -610,7 +619,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^gcloud\b",
-        rtk_cmd: "rtk gcloud",
+        rtk_cmd: "rtk-tx gcloud",
         rewrite_prefixes: &["gcloud"],
         category: "Infra",
         savings_pct: 65.0,
@@ -619,7 +628,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^hadolint\b",
-        rtk_cmd: "rtk hadolint",
+        rtk_cmd: "rtk-tx hadolint",
         rewrite_prefixes: &["hadolint"],
         category: "Build",
         savings_pct: 65.0,
@@ -628,7 +637,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^helm\b",
-        rtk_cmd: "rtk helm",
+        rtk_cmd: "rtk-tx helm",
         rewrite_prefixes: &["helm"],
         category: "Infra",
         savings_pct: 65.0,
@@ -637,7 +646,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^iptables\b",
-        rtk_cmd: "rtk iptables",
+        rtk_cmd: "rtk-tx iptables",
         rewrite_prefixes: &["iptables"],
         category: "Infra",
         savings_pct: 60.0,
@@ -646,7 +655,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^make\b",
-        rtk_cmd: "rtk make",
+        rtk_cmd: "rtk-tx make",
         rewrite_prefixes: &["make"],
         category: "Build",
         savings_pct: 65.0,
@@ -655,7 +664,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^markdownlint\b",
-        rtk_cmd: "rtk markdownlint",
+        rtk_cmd: "rtk-tx markdownlint",
         rewrite_prefixes: &["markdownlint"],
         category: "Build",
         savings_pct: 65.0,
@@ -664,7 +673,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^mix\s+(compile|format)(\s|$)",
-        rtk_cmd: "rtk mix",
+        rtk_cmd: "rtk-tx mix",
         rewrite_prefixes: &["mix"],
         category: "Build",
         savings_pct: 65.0,
@@ -673,7 +682,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^mvn\s+(compile|package|clean|install)\b",
-        rtk_cmd: "rtk mvn",
+        rtk_cmd: "rtk-tx mvn",
         rewrite_prefixes: &["mvn"],
         category: "Build",
         savings_pct: 70.0,
@@ -682,7 +691,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^ping\b",
-        rtk_cmd: "rtk ping",
+        rtk_cmd: "rtk-tx ping",
         rewrite_prefixes: &["ping"],
         category: "Network",
         savings_pct: 60.0,
@@ -691,7 +700,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^pio\s+run",
-        rtk_cmd: "rtk pio",
+        rtk_cmd: "rtk-tx pio",
         rewrite_prefixes: &["pio"],
         category: "Build",
         savings_pct: 65.0,
@@ -700,7 +709,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^poetry\s+(install|lock|update)\b",
-        rtk_cmd: "rtk poetry",
+        rtk_cmd: "rtk-tx poetry",
         rewrite_prefixes: &["poetry"],
         category: "Python",
         savings_pct: 65.0,
@@ -709,7 +718,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^pre-commit\b",
-        rtk_cmd: "rtk pre-commit",
+        rtk_cmd: "rtk-tx pre-commit",
         rewrite_prefixes: &["pre-commit"],
         category: "Build",
         savings_pct: 65.0,
@@ -718,7 +727,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^ps(\s|$)",
-        rtk_cmd: "rtk ps",
+        rtk_cmd: "rtk-tx ps",
         rewrite_prefixes: &["ps"],
         category: "System",
         savings_pct: 60.0,
@@ -727,7 +736,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^quarto\s+render",
-        rtk_cmd: "rtk quarto",
+        rtk_cmd: "rtk-tx quarto",
         rewrite_prefixes: &["quarto"],
         category: "Build",
         savings_pct: 65.0,
@@ -736,7 +745,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^rsync\b",
-        rtk_cmd: "rtk rsync",
+        rtk_cmd: "rtk-tx rsync",
         rewrite_prefixes: &["rsync"],
         category: "Network",
         savings_pct: 65.0,
@@ -745,7 +754,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^shellcheck\b",
-        rtk_cmd: "rtk shellcheck",
+        rtk_cmd: "rtk-tx shellcheck",
         rewrite_prefixes: &["shellcheck"],
         category: "Build",
         savings_pct: 65.0,
@@ -754,7 +763,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^shopify\s+theme\s+(push|pull)",
-        rtk_cmd: "rtk shopify",
+        rtk_cmd: "rtk-tx shopify",
         rewrite_prefixes: &["shopify"],
         category: "Build",
         savings_pct: 65.0,
@@ -763,7 +772,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^sops\b",
-        rtk_cmd: "rtk sops",
+        rtk_cmd: "rtk-tx sops",
         rewrite_prefixes: &["sops"],
         category: "Infra",
         savings_pct: 60.0,
@@ -772,7 +781,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^swift\s+(build|test)\b",
-        rtk_cmd: "rtk swift",
+        rtk_cmd: "rtk-tx swift",
         rewrite_prefixes: &["swift"],
         category: "Build",
         savings_pct: 65.0,
@@ -781,7 +790,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^systemctl\s+status\b",
-        rtk_cmd: "rtk systemctl",
+        rtk_cmd: "rtk-tx systemctl",
         rewrite_prefixes: &["systemctl"],
         category: "System",
         savings_pct: 65.0,
@@ -790,7 +799,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^terraform\s+plan",
-        rtk_cmd: "rtk terraform",
+        rtk_cmd: "rtk-tx terraform",
         rewrite_prefixes: &["terraform"],
         category: "Infra",
         savings_pct: 70.0,
@@ -799,7 +808,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^tofu\s+(fmt|init|plan|validate)(\s|$)",
-        rtk_cmd: "rtk tofu",
+        rtk_cmd: "rtk-tx tofu",
         rewrite_prefixes: &["tofu"],
         category: "Infra",
         savings_pct: 70.0,
@@ -808,7 +817,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^trunk\s+build",
-        rtk_cmd: "rtk trunk",
+        rtk_cmd: "rtk-tx trunk",
         rewrite_prefixes: &["trunk"],
         category: "Build",
         savings_pct: 65.0,
@@ -817,7 +826,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^uv\s+(sync|pip\s+install)\b",
-        rtk_cmd: "rtk uv",
+        rtk_cmd: "rtk-tx uv",
         rewrite_prefixes: &["uv"],
         category: "Python",
         savings_pct: 65.0,
@@ -826,7 +835,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^yamllint\b",
-        rtk_cmd: "rtk yamllint",
+        rtk_cmd: "rtk-tx yamllint",
         rewrite_prefixes: &["yamllint"],
         category: "Build",
         savings_pct: 65.0,
@@ -835,7 +844,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^wc(\s|$)",
-        rtk_cmd: "rtk wc",
+        rtk_cmd: "rtk-tx wc",
         rewrite_prefixes: &["wc"],
         category: "Files",
         savings_pct: 60.0,
@@ -844,7 +853,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^gt\s+",
-        rtk_cmd: "rtk gt",
+        rtk_cmd: "rtk-tx gt",
         rewrite_prefixes: &["gt"],
         category: "Git",
         savings_pct: 70.0,
@@ -853,7 +862,7 @@ pub const RULES: &[RtkRule] = &[
     },
     RtkRule {
         pattern: r"^liquibase(?:\s|$)",
-        rtk_cmd: "rtk liquibase",
+        rtk_cmd: "rtk-tx liquibase",
         rewrite_prefixes: &["liquibase"],
         category: "Infra",
         savings_pct: 65.0,
@@ -896,6 +905,7 @@ pub const IGNORED_PREFIXES: &[&str] = &[
     "python -c",
     "node -e",
     "ruby -e",
+    "rtk-tx ",
     "rtk ",
     "pwd",
     "bash ",
@@ -913,5 +923,5 @@ pub const IGNORED_PREFIXES: &[&str] = &[
 ];
 
 pub const IGNORED_EXACT: &[&str] = &[
-    "cd", "echo", "true", "false", "wait", "pwd", "bash", "sh", "fi", "done",
+    "cd", "echo", "true", "false", "wait", "pwd", "bash", "sh", "fi", "done", "rtk-tx", "rtk",
 ];

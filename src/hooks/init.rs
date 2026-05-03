@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
 use super::constants::{
-    BEFORE_TOOL_KEY, CLAUDE_DIR, CLAUDE_HOOK_COMMAND, CODEX_DIR, CURSOR_HOOK_COMMAND,
-    GEMINI_HOOK_FILE, HOOKS_JSON, HOOKS_SUBDIR, PRE_TOOL_USE_KEY, REWRITE_HOOK_FILE, SETTINGS_JSON,
+    BEFORE_TOOL_KEY, CLAUDE_DIR, CLAUDE_HOOK_COMMAND, CODEBUDDY_DIR, CODEBUDDY_HOOK_COMMAND,
+    CODEX_DIR, CURSOR_HOOK_COMMAND, GEMINI_HOOK_FILE, HOOKS_JSON, HOOKS_SUBDIR, PRE_TOOL_USE_KEY,
+    REWRITE_HOOK_FILE, SETTINGS_JSON,
 };
 use super::integrity;
 
@@ -35,7 +36,7 @@ schema_version = 1
 # on_empty = "my-tool: ok"
 "#;
 
-/// Template for user-global filters (~/.config/rtk/filters.toml).
+/// Template for user-global filters (~/.config/rtk-tx/filters.toml).
 const FILTERS_GLOBAL_TEMPLATE: &str = r#"# User-global RTK filters — apply to all your projects.
 # Project-local .rtk/filters.toml takes precedence over these.
 # Docs: https://github.com/rtk-ai/rtk#custom-filters
@@ -290,7 +291,8 @@ pub fn run(
         install_cursor_hooks(verbose)?;
     }
 
-    prompt_telemetry_consent()?;
+    // Remote telemetry is disabled/absent in rtk-tx v1; init must not prompt
+    // users to opt into network telemetry.
 
     println!();
 
@@ -389,56 +391,6 @@ pub fn save_telemetry_consent(accepted: bool) -> Result<()> {
     config
         .save()
         .context("Failed to save telemetry consent to config.toml")
-}
-
-fn prompt_telemetry_consent() -> Result<()> {
-    use std::io::{self, BufRead, IsTerminal};
-
-    let config = crate::core::config::Config::load().unwrap_or_default();
-    match config.telemetry.consent_given {
-        Some(true) => return Ok(()),
-        Some(false) => return Ok(()),
-        None => {}
-    }
-
-    if !io::stdin().is_terminal() {
-        return Ok(());
-    }
-
-    eprintln!();
-    eprintln!("--- Telemetry ---");
-    eprintln!("RTK collects anonymous usage metrics once per day to improve filters.");
-    eprintln!();
-    eprintln!("  What:    command names (not arguments), token savings, OS, version");
-    eprintln!("  Why:     prioritize filter development for the most-used commands");
-    eprintln!("  Who:     RTK AI Labs, contact@rtk-ai.app");
-    eprintln!("  Rights:  disable anytime with `rtk telemetry disable`,");
-    eprintln!("           request erasure with `rtk telemetry forget`");
-    eprintln!("  Details: https://github.com/rtk-ai/rtk/blob/main/docs/TELEMETRY.md");
-    eprintln!();
-    eprint!("Enable anonymous telemetry? [y/N] ");
-
-    let stdin = io::stdin();
-    let mut line = String::new();
-    stdin
-        .lock()
-        .read_line(&mut line)
-        .context("Failed to read user input")?;
-
-    let accepted = {
-        let response = line.trim().to_lowercase();
-        response == "y" || response == "yes"
-    };
-
-    save_telemetry_consent(accepted)?;
-
-    if accepted {
-        eprintln!("  Telemetry enabled. Disable anytime: rtk telemetry disable");
-    } else {
-        eprintln!("  Telemetry disabled.");
-    }
-
-    Ok(())
 }
 
 fn print_manual_instructions(hook_command: &str, include_opencode: bool) {
@@ -786,6 +738,138 @@ fn patch_settings_json_command(
     Ok(PatchResult::Patched)
 }
 
+/// Initialize CodeBuddy Code settings with the native rtk-tx Bash hook.
+pub fn run_codebuddy(global: bool, verbose: u8) -> Result<()> {
+    let settings_path = resolve_codebuddy_settings_path(global)?;
+    let patch_result = patch_codebuddy_settings_json(&settings_path, verbose)?;
+
+    if patch_result == PatchResult::AlreadyPresent {
+        println!("\n  settings.json: CodeBuddy hook already present");
+    }
+
+    println!("  CodeBuddy settings: {}", settings_path.display());
+    println!("  Command: {}", CODEBUDDY_HOOK_COMMAND);
+    println!("  Restart CodeBuddy Code. Test with: git status\n");
+
+    Ok(())
+}
+
+fn resolve_codebuddy_settings_path(global: bool) -> Result<PathBuf> {
+    let cwd = std::env::current_dir().context("Failed to determine current working directory")?;
+    codebuddy_settings_path_from(global, dirs::home_dir(), &cwd)
+}
+
+fn codebuddy_settings_path_from(
+    global: bool,
+    home_dir: Option<PathBuf>,
+    cwd: &Path,
+) -> Result<PathBuf> {
+    let codebuddy_dir = if global {
+        home_dir
+            .map(|home| home.join(CODEBUDDY_DIR))
+            .context("Cannot determine home directory. Is $HOME set?")?
+    } else {
+        cwd.join(CODEBUDDY_DIR)
+    };
+
+    Ok(codebuddy_dir.join(SETTINGS_JSON))
+}
+
+fn patch_codebuddy_settings_json(path: &Path, verbose: u8) -> Result<PatchResult> {
+    let mut root = if path.exists() {
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read {}", path.display()))?;
+
+        if content.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse {} as JSON", path.display()))?
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    let already_present = exact_command_hook_already_present(&root, CODEBUDDY_HOOK_COMMAND);
+    let deduped = dedupe_exact_command_hooks(&mut root, CODEBUDDY_HOOK_COMMAND);
+
+    if already_present && !deduped {
+        if verbose > 0 {
+            eprintln!("CodeBuddy settings.json: hook already present");
+        }
+        return Ok(PatchResult::AlreadyPresent);
+    }
+
+    if !already_present {
+        insert_hook_entry(&mut root, CODEBUDDY_HOOK_COMMAND)?;
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
+    }
+
+    let serialized = serde_json::to_string_pretty(&root)
+        .context("Failed to serialize CodeBuddy settings.json")?;
+    atomic_write(path, &serialized)?;
+
+    println!("\n  settings.json: CodeBuddy hook added");
+    Ok(PatchResult::Patched)
+}
+
+fn exact_command_hook_already_present(root: &serde_json::Value, hook_command: &str) -> bool {
+    root.get("hooks")
+        .and_then(|h| h.get(PRE_TOOL_USE_KEY))
+        .and_then(|p| p.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.get("hooks")?.as_array())
+        .flatten()
+        .filter_map(|hook| hook.get("command")?.as_str())
+        .any(|cmd| cmd == hook_command)
+}
+
+fn dedupe_exact_command_hooks(root: &mut serde_json::Value, hook_command: &str) -> bool {
+    let pre_tool_use_array = match root
+        .get_mut("hooks")
+        .and_then(|h| h.get_mut(PRE_TOOL_USE_KEY))
+        .and_then(|p| p.as_array_mut())
+    {
+        Some(arr) => arr,
+        None => return false,
+    };
+
+    let mut seen = false;
+    let mut changed = false;
+
+    for entry in pre_tool_use_array {
+        let Some(hooks_array) = entry.get_mut("hooks").and_then(|h| h.as_array_mut()) else {
+            continue;
+        };
+
+        hooks_array.retain(|hook| {
+            let is_match = hook
+                .get("command")
+                .and_then(|c| c.as_str())
+                .is_some_and(|cmd| cmd == hook_command);
+
+            if !is_match {
+                return true;
+            }
+
+            if seen {
+                changed = true;
+                false
+            } else {
+                seen = true;
+                true
+            }
+        });
+    }
+
+    changed
+}
+
 /// Clean up consecutive blank lines (collapse 3+ to 2)
 /// Used when removing @RTK.md line from CLAUDE.md
 fn clean_double_blanks(content: &str) -> String {
@@ -942,7 +1026,7 @@ fn run_default_mode(
         }
     }
 
-    // 6. Generate user-global filters template (~/.config/rtk/filters.toml)
+    // 6. Generate user-global filters template (~/.config/rtk-tx/filters.toml)
     generate_global_filters_template(verbose)?;
 
     println!(); // Final newline
@@ -1087,7 +1171,7 @@ fn generate_project_filters_template(verbose: u8) -> Result<()> {
     Ok(())
 }
 
-/// Generate ~/.config/rtk/filters.toml template if not present.
+/// Generate ~/.config/rtk-tx/filters.toml template if not present.
 fn generate_global_filters_template(verbose: u8) -> Result<()> {
     let config_dir = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from(".config"));
     let rtk_dir = config_dir.join(crate::core::constants::RTK_DATA_DIR);
@@ -1403,6 +1487,236 @@ fn run_antigravity_mode_at(base_dir: &Path, verbose: u8) -> Result<()> {
     println!("  Test with: git status\n");
 
     Ok(())
+}
+
+// ─── Hermes support ────────────────────────────────────────────
+
+const HERMES_PLUGIN_INIT: &str = include_str!("../../hermes/rtk-rewrite/__init__.py");
+const HERMES_PLUGIN_YAML: &str = include_str!("../../hermes/rtk-rewrite/plugin.yaml");
+const HERMES_PLUGIN_NAME: &str = "rtk-rewrite";
+
+pub fn run_hermes_mode(verbose: u8) -> Result<()> {
+    let hermes_home = resolve_home_subdir(".hermes")?;
+    run_hermes_mode_at(&hermes_home, verbose)
+}
+
+fn run_hermes_mode_at(hermes_home: &Path, verbose: u8) -> Result<()> {
+    let plugin_dir = hermes_home.join("plugins").join(HERMES_PLUGIN_NAME);
+    fs::create_dir_all(&plugin_dir).with_context(|| {
+        format!(
+            "Failed to create Hermes plugin directory: {}",
+            plugin_dir.display()
+        )
+    })?;
+
+    let init_path = plugin_dir.join("__init__.py");
+    let manifest_path = plugin_dir.join("plugin.yaml");
+    write_if_changed(&init_path, HERMES_PLUGIN_INIT, "Hermes plugin", verbose)?;
+    write_if_changed(
+        &manifest_path,
+        HERMES_PLUGIN_YAML,
+        "Hermes plugin manifest",
+        verbose,
+    )?;
+
+    let config_path = hermes_home.join("config.yaml");
+    let existing_config = if config_path.exists() {
+        fs::read_to_string(&config_path)
+            .with_context(|| format!("Failed to read Hermes config: {}", config_path.display()))?
+    } else {
+        String::new()
+    };
+    let patched_config = patch_hermes_config(&existing_config);
+    write_if_changed(&config_path, &patched_config, "Hermes config", verbose)?;
+
+    println!("\nRTK configured for Hermes.\n");
+    println!("  Plugin: {}", plugin_dir.display());
+    println!("  Config: {}", config_path.display());
+    println!("  Hermes will now rewrite terminal commands through rtk.");
+    println!("  Restart Hermes. Test with: git status\n");
+
+    Ok(())
+}
+
+fn patch_hermes_config(existing: &str) -> String {
+    if existing.trim().is_empty() {
+        return hermes_plugins_block();
+    }
+
+    let mut lines = split_yaml_lines(existing);
+    let Some(plugins_idx) = find_yaml_key_line(&lines, "plugins", 0, None) else {
+        return append_hermes_plugins_block(existing);
+    };
+
+    let plugins_indent = yaml_indent(&lines[plugins_idx]);
+    let plugins_end = yaml_block_end(&lines, plugins_idx, plugins_indent);
+    let Some(enabled_idx) = find_yaml_key_line(
+        &lines,
+        "enabled",
+        plugins_idx + 1,
+        Some((plugins_end, plugins_indent)),
+    ) else {
+        let enabled_block = format!(
+            "{}enabled:\n{}  - {}\n",
+            " ".repeat(plugins_indent + 2),
+            " ".repeat(plugins_indent + 2),
+            HERMES_PLUGIN_NAME
+        );
+        lines.insert(plugins_end, enabled_block);
+        return lines.concat();
+    };
+
+    if yaml_line_without_ending(&lines[enabled_idx]).contains('[') {
+        patch_inline_hermes_enabled(&mut lines, enabled_idx);
+        return lines.concat();
+    }
+
+    patch_block_hermes_enabled(&mut lines, enabled_idx);
+    lines.concat()
+}
+
+fn split_yaml_lines(input: &str) -> Vec<String> {
+    if input.is_empty() {
+        Vec::new()
+    } else {
+        input.split_inclusive('\n').map(str::to_string).collect()
+    }
+}
+
+fn hermes_plugins_block() -> String {
+    format!("plugins:\n  enabled:\n    - {}\n", HERMES_PLUGIN_NAME)
+}
+
+fn append_hermes_plugins_block(existing: &str) -> String {
+    let mut patched = existing.to_string();
+    if !patched.ends_with('\n') {
+        patched.push('\n');
+    }
+    patched.push_str(&hermes_plugins_block());
+    patched
+}
+
+fn find_yaml_key_line(
+    lines: &[String],
+    key: &str,
+    start: usize,
+    block: Option<(usize, usize)>,
+) -> Option<usize> {
+    let end = block.map_or(lines.len(), |(end, _)| end);
+    let min_indent = block.map(|(_, indent)| indent);
+
+    lines[start..end]
+        .iter()
+        .enumerate()
+        .find_map(|(offset, line)| {
+            let raw = yaml_line_without_ending(line);
+            let trimmed = raw.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                return None;
+            }
+
+            if min_indent.is_some_and(|indent| yaml_indent(line) <= indent) {
+                return None;
+            }
+
+            let is_key = trimmed == format!("{key}:") || trimmed.starts_with(&format!("{key}:"));
+            is_key.then_some(start + offset)
+        })
+}
+
+fn yaml_block_end(lines: &[String], start: usize, parent_indent: usize) -> usize {
+    lines[start + 1..]
+        .iter()
+        .enumerate()
+        .find_map(|(offset, line)| {
+            let raw = yaml_line_without_ending(line);
+            let trimmed = raw.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                return None;
+            }
+
+            (yaml_indent(line) <= parent_indent).then_some(start + 1 + offset)
+        })
+        .unwrap_or(lines.len())
+}
+
+fn patch_inline_hermes_enabled(lines: &mut [String], enabled_idx: usize) {
+    let raw = yaml_line_without_ending(&lines[enabled_idx]);
+    let indent = yaml_indent(&lines[enabled_idx]);
+    let values = raw
+        .split_once(':')
+        .map(|(_, value)| value.trim())
+        .unwrap_or_default();
+    let items = values
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .map(|value| {
+            value
+                .split(',')
+                .filter_map(normalized_yaml_scalar)
+                .filter(|item| item != HERMES_PLUGIN_NAME)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let mut replacement = format!("{}enabled:\n", " ".repeat(indent));
+    for item in items {
+        replacement.push_str(&format!("{}- {}\n", " ".repeat(indent + 2), item));
+    }
+    replacement.push_str(&format!(
+        "{}- {}\n",
+        " ".repeat(indent + 2),
+        HERMES_PLUGIN_NAME
+    ));
+    lines[enabled_idx] = replacement;
+}
+
+fn patch_block_hermes_enabled(lines: &mut Vec<String>, enabled_idx: usize) {
+    let enabled_indent = yaml_indent(&lines[enabled_idx]);
+    let enabled_end = yaml_block_end(lines, enabled_idx, enabled_indent);
+    let rtk_entry = format!(
+        "{}- {}\n",
+        " ".repeat(enabled_indent + 2),
+        HERMES_PLUGIN_NAME
+    );
+
+    let mut patched = Vec::with_capacity(lines.len() + 1);
+    patched.extend_from_slice(&lines[..=enabled_idx]);
+    patched.extend(
+        lines[enabled_idx + 1..enabled_end]
+            .iter()
+            .filter(|line| !is_yaml_list_item_named(line, HERMES_PLUGIN_NAME))
+            .cloned(),
+    );
+    patched.push(rtk_entry);
+    patched.extend_from_slice(&lines[enabled_end..]);
+    *lines = patched;
+}
+
+fn yaml_line_without_ending(line: &str) -> &str {
+    line.trim_end_matches(['\r', '\n'])
+}
+
+fn yaml_indent(line: &str) -> usize {
+    yaml_line_without_ending(line)
+        .chars()
+        .take_while(|ch| ch.is_whitespace())
+        .count()
+}
+
+fn is_yaml_list_item_named(line: &str, expected: &str) -> bool {
+    let trimmed = yaml_line_without_ending(line).trim();
+    let Some(item) = trimmed.strip_prefix("- ") else {
+        return false;
+    };
+
+    normalized_yaml_scalar(item).is_some_and(|item| item == expected)
+}
+
+fn normalized_yaml_scalar(value: &str) -> Option<String> {
+    let without_comment = value.split_once('#').map_or(value, |(item, _)| item);
+    let trimmed = without_comment.trim().trim_matches(['\'', '"']);
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
 fn run_codex_mode(global: bool, verbose: u8) -> Result<()> {
@@ -2958,6 +3272,78 @@ More notes
     }
 
     #[test]
+    fn test_hermes_mode_creates_plugin_files() {
+        let temp = TempDir::new().unwrap();
+        run_hermes_mode_at(temp.path(), 0).unwrap();
+
+        let plugin_dir = temp.path().join("plugins/rtk-rewrite");
+        let init_path = plugin_dir.join("__init__.py");
+        let manifest_path = plugin_dir.join("plugin.yaml");
+        let config_path = temp.path().join("config.yaml");
+
+        assert!(init_path.exists(), "Python plugin should be created");
+        assert!(manifest_path.exists(), "Plugin manifest should be created");
+        assert_eq!(
+            fs::read_to_string(&init_path).unwrap(),
+            include_str!("../../hermes/rtk-rewrite/__init__.py")
+        );
+        assert_eq!(
+            fs::read_to_string(&manifest_path).unwrap(),
+            include_str!("../../hermes/rtk-rewrite/plugin.yaml")
+        );
+
+        let config = fs::read_to_string(&config_path).unwrap();
+        assert!(config.contains("plugins:\n"));
+        assert!(config.contains("  enabled:\n"));
+        assert_eq!(config.matches("rtk-rewrite").count(), 1);
+    }
+
+    #[test]
+    fn test_hermes_mode_preserves_config_and_is_idempotent() {
+        let temp = TempDir::new().unwrap();
+        let config_path = temp.path().join("config.yaml");
+        fs::write(
+            &config_path,
+            "theme: dark\nplugins:\n  enabled:\n    - existing-plugin\n  search_path: ./plugins\nother: true\n",
+        )
+        .unwrap();
+
+        run_hermes_mode_at(temp.path(), 0).unwrap();
+        let first = fs::read_to_string(&config_path).unwrap();
+        run_hermes_mode_at(temp.path(), 0).unwrap();
+        let second = fs::read_to_string(&config_path).unwrap();
+
+        assert_eq!(first, second, "Hermes config patch should be idempotent");
+        assert!(first.contains("theme: dark\n"));
+        assert!(first.contains("    - existing-plugin\n"));
+        assert!(first.contains("  search_path: ./plugins\n"));
+        assert!(first.contains("other: true\n"));
+        assert_eq!(first.matches("rtk-rewrite").count(), 1);
+    }
+
+    #[test]
+    fn test_hermes_config_patch_adds_missing_enabled_list() {
+        let existing = "theme: dark\nplugins:\n  search_path: ./plugins\nother: true\n";
+        let patched = patch_hermes_config(existing);
+
+        assert!(patched.contains("theme: dark\n"));
+        assert!(patched.contains("plugins:\n"));
+        assert!(patched.contains("  search_path: ./plugins\n"));
+        assert!(patched.contains("  enabled:\n    - rtk-rewrite\n"));
+        assert!(patched.contains("other: true\n"));
+        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+    }
+
+    #[test]
+    fn test_hermes_config_patch_removes_duplicate_rtk_rewrite() {
+        let existing = "plugins:\n  enabled:\n    - rtk-rewrite\n    - other\n    - rtk-rewrite\n";
+        let patched = patch_hermes_config(existing);
+
+        assert!(patched.contains("    - other\n"));
+        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+    }
+
+    #[test]
     fn test_patch_agents_md_creates_missing_file() {
         let temp = TempDir::new().unwrap();
         let agents_md = temp.path().join("AGENTS.md");
@@ -3222,6 +3608,199 @@ More notes
 
         // And add hooks
         assert!(json_content.get("hooks").is_some());
+    }
+
+    fn count_exact_command_hooks(root: &serde_json::Value, hook_command: &str) -> usize {
+        root.get("hooks")
+            .and_then(|h| h.get(PRE_TOOL_USE_KEY))
+            .and_then(|p| p.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.get("hooks")?.as_array())
+            .flatten()
+            .filter_map(|hook| hook.get("command")?.as_str())
+            .filter(|cmd| *cmd == hook_command)
+            .count()
+    }
+
+    #[test]
+    fn test_codebuddy_settings_path_project_and_global() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+
+        let project_path =
+            codebuddy_settings_path_from(false, Some(home.path().to_path_buf()), project.path())
+                .unwrap();
+        assert_eq!(
+            project_path,
+            project.path().join(CODEBUDDY_DIR).join(SETTINGS_JSON)
+        );
+
+        let global_path =
+            codebuddy_settings_path_from(true, Some(home.path().to_path_buf()), project.path())
+                .unwrap();
+        assert_eq!(
+            global_path,
+            home.path().join(CODEBUDDY_DIR).join(SETTINGS_JSON)
+        );
+    }
+
+    #[test]
+    fn test_codebuddy_patch_creates_settings_only_and_preserves_local_settings() {
+        let temp = TempDir::new().unwrap();
+        let codebuddy_dir = temp.path().join(CODEBUDDY_DIR);
+        fs::create_dir_all(&codebuddy_dir).unwrap();
+
+        let settings = codebuddy_dir.join(SETTINGS_JSON);
+        let local_settings = codebuddy_dir.join(crate::hooks::constants::SETTINGS_LOCAL_JSON);
+        let local_original = r#"{"doNotTouch": true}"#;
+        fs::write(&local_settings, local_original).unwrap();
+
+        patch_codebuddy_settings_json(&settings, 0).unwrap();
+
+        assert!(settings.exists());
+        assert_eq!(fs::read_to_string(&local_settings).unwrap(), local_original);
+        assert!(!temp.path().join(CLAUDE_DIR).join(SETTINGS_JSON).exists());
+        assert!(!temp.path().join(CLAUDE_MD).exists());
+        assert!(!temp.path().join(RTK_MD).exists());
+
+        let root: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        let entry = &root["hooks"][PRE_TOOL_USE_KEY][0];
+        assert_eq!(entry["matcher"], "Bash");
+        assert_eq!(entry["hooks"][0]["type"], "command");
+        assert_eq!(entry["hooks"][0]["command"], CODEBUDDY_HOOK_COMMAND);
+    }
+
+    #[test]
+    fn test_codebuddy_patch_idempotent() {
+        let temp = TempDir::new().unwrap();
+        let settings = temp.path().join(CODEBUDDY_DIR).join(SETTINGS_JSON);
+
+        patch_codebuddy_settings_json(&settings, 0).unwrap();
+        patch_codebuddy_settings_json(&settings, 0).unwrap();
+
+        let root: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(count_exact_command_hooks(&root, CODEBUDDY_HOOK_COMMAND), 1);
+    }
+
+    #[test]
+    fn test_codebuddy_patch_preserves_unrelated_settings_and_hooks() {
+        let temp = TempDir::new().unwrap();
+        let settings = temp.path().join(CODEBUDDY_DIR).join(SETTINGS_JSON);
+        fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        fs::write(
+            &settings,
+            r#"{
+  "env": {"KEEP": "yes"},
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Bash",
+      "hooks": [{"type": "command", "command": "other-tool hook"}]
+    }],
+    "PostToolUse": [{"matcher": "Write", "hooks": [{"type": "command", "command": "after"}]}]
+  },
+  "model": "preserve-me"
+}"#,
+        )
+        .unwrap();
+
+        patch_codebuddy_settings_json(&settings, 0).unwrap();
+
+        let root: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(root["env"]["KEEP"], "yes");
+        assert_eq!(root["model"], "preserve-me");
+        assert_eq!(
+            root["hooks"]["PostToolUse"][0]["hooks"][0]["command"],
+            "after"
+        );
+
+        let pre_tool_use = root["hooks"][PRE_TOOL_USE_KEY].as_array().unwrap();
+        assert_eq!(pre_tool_use.len(), 2);
+        assert_eq!(pre_tool_use[0]["hooks"][0]["command"], "other-tool hook");
+        assert_eq!(pre_tool_use[1]["matcher"], "Bash");
+        assert_eq!(pre_tool_use[1]["hooks"][0]["type"], "command");
+        assert_eq!(
+            pre_tool_use[1]["hooks"][0]["command"],
+            CODEBUDDY_HOOK_COMMAND
+        );
+    }
+
+    #[test]
+    fn test_codebuddy_patch_existing_settings_does_not_create_backup() {
+        let temp = TempDir::new().unwrap();
+        let settings = temp.path().join(CODEBUDDY_DIR).join(SETTINGS_JSON);
+        fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        fs::write(&settings, r#"{"env":{"KEEP":"yes"}}"#).unwrap();
+
+        patch_codebuddy_settings_json(&settings, 0).unwrap();
+
+        assert!(settings.exists());
+        assert!(
+            !settings.with_extension("json.bak").exists(),
+            "CodeBuddy init must not create settings.json.bak"
+        );
+        let root: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(root["env"]["KEEP"], "yes");
+        assert_eq!(count_exact_command_hooks(&root, CODEBUDDY_HOOK_COMMAND), 1);
+    }
+
+    #[test]
+    fn test_codebuddy_patch_malformed_json_preserves_original_bytes() {
+        let temp = TempDir::new().unwrap();
+        let settings = temp.path().join(CODEBUDDY_DIR).join(SETTINGS_JSON);
+        fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        let original = b"{ malformed json\n";
+        fs::write(&settings, original).unwrap();
+
+        let err = patch_codebuddy_settings_json(&settings, 0).unwrap_err();
+        assert!(err.to_string().contains("Failed to parse"));
+        assert_eq!(fs::read(&settings).unwrap(), original);
+    }
+
+    #[test]
+    fn test_codebuddy_patch_dedupes_codebuddy_only() {
+        let temp = TempDir::new().unwrap();
+        let settings = temp.path().join(CODEBUDDY_DIR).join(SETTINGS_JSON);
+        fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        fs::write(
+            &settings,
+            serde_json::to_string_pretty(&serde_json::json!({
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": CODEBUDDY_HOOK_COMMAND}]
+                        },
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": CODEBUDDY_HOOK_COMMAND}]
+                        },
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": CLAUDE_HOOK_COMMAND}]
+                        },
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": "/tmp/rtk-rewrite.sh"}]
+                        }
+                    ]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        patch_codebuddy_settings_json(&settings, 0).unwrap();
+
+        let root: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(count_exact_command_hooks(&root, CODEBUDDY_HOOK_COMMAND), 1);
+        assert_eq!(count_exact_command_hooks(&root, CLAUDE_HOOK_COMMAND), 1);
+        assert_eq!(count_exact_command_hooks(&root, "/tmp/rtk-rewrite.sh"), 1);
     }
 
     // Tests for atomic_write()

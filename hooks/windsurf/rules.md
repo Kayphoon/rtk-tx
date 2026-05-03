@@ -4,29 +4,29 @@
 
 ## Rule
 
-Always prefix shell commands with `rtk` to minimize token consumption.
+Always prefix shell commands with `rtk-tx` to minimize token consumption.
 
 Examples:
 
 ```bash
-rtk git status
-rtk cargo test
-rtk ls src/
-rtk grep "pattern" src/
-rtk find "*.rs" .
-rtk docker ps
-rtk gh pr list
+rtk-tx git status
+rtk-tx cargo test
+rtk-tx ls src/
+rtk-tx grep "pattern" src/
+rtk-tx find "*.rs" .
+rtk-tx docker ps
+rtk-tx gh pr list
 ```
 
 ## Meta Commands
 
 ```bash
-rtk gain              # Show token savings
-rtk gain --history    # Command history with savings
-rtk discover          # Find missed RTK opportunities
-rtk proxy <cmd>       # Run raw (no filtering, for debugging)
+rtk-tx gain              # Show token savings
+rtk-tx gain --history    # Command history with savings
+rtk-tx discover          # Find missed RTK opportunities
+rtk-tx proxy <cmd>       # Run raw (no filtering, for debugging)
 ```
 
 ## Why
 
-RTK filters and compresses command output before it reaches the LLM context, saving 60-90% tokens on common operations. Always use `rtk <cmd>` instead of raw commands.
+RTK filters and compresses command output before it reaches the LLM context, saving 60-90% tokens on common operations. Always use `rtk-tx <cmd>` instead of raw commands.

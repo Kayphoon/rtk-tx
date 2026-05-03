@@ -4,29 +4,29 @@
 
 ## Rule
 
-Always prefix shell commands with `rtk`.
+Always prefix shell commands with `rtk-tx`.
 
 Examples:
 
 ```bash
-rtk git status
-rtk cargo test
-rtk npm run build
-rtk pytest -q
+rtk-tx git status
+rtk-tx cargo test
+rtk-tx npm run build
+rtk-tx pytest -q
 ```
 
 ## Meta Commands
 
 ```bash
-rtk gain            # Token savings analytics
-rtk gain --history  # Recent command savings history
-rtk proxy <cmd>     # Run raw command without filtering
+rtk-tx gain            # Token savings analytics
+rtk-tx gain --history  # Recent command savings history
+rtk-tx proxy <cmd>     # Run raw command without filtering
 ```
 
 ## Verification
 
 ```bash
-rtk --version
-rtk gain
-which rtk
+rtk-tx --version
+rtk-tx gain
+which rtk-tx
 ```

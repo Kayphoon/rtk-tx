@@ -1,12 +1,12 @@
-# RTK Installation Guide - For AI Coding Assistants
+# rtk-tx Installation Guide - For AI Coding Assistants
 
 ## ⚠️ Name Collision Warning
 
 **There are TWO completely different projects named "rtk":**
 
-1. ✅ **Rust Token Killer** (this project) - LLM token optimizer
+1. ✅ **rtk-tx / Rust Token Killer fork** (this project) - LLM token optimizer
    - Repos: `rtk-ai/rtk`
-   - Has `rtk gain` command for token savings stats
+   - Has `rtk-tx gain` command for token savings stats
 
 2. ❌ **Rust Type Kit** (reachingforthejack/rtk) - DIFFERENT PROJECT
    - Rust codebase query tool and type generator
@@ -14,58 +14,44 @@
 
 ## Pre-Installation Check (REQUIRED)
 
-**AI assistants should ALWAYS verify if RTK is already installed before attempting installation.**
+**AI assistants should ALWAYS verify if rtk-tx is already installed before attempting installation.**
 
 ```bash
 # Check if RTK is installed
-rtk --version
+rtk-tx --version
 
 # CRITICAL: Verify it's the Token Killer (not Type Kit)
-rtk gain    # Should show token savings stats, NOT "command not found"
+rtk-tx gain    # Should show token savings stats, NOT "command not found"
 
 # Check installation path
-which rtk
+which rtk-tx
 ```
 
-If `rtk gain` works, you have the **correct** RTK installed. **DO NOT reinstall**. Skip to "Project Initialization".
+If `rtk-tx gain` works, you have the **correct** rtk-tx installed. **DO NOT reinstall**. Skip to "Project Initialization".
 
-If `rtk gain` fails but `rtk --version` succeeds, you have the **wrong** RTK (Type Kit). Uninstall and reinstall the correct one (see below).
+If `rtk-tx gain` fails but `rtk-tx --version` succeeds, you have the **wrong** RTK (Type Kit). Uninstall and reinstall the correct one (see below).
 
-## Installation (only if RTK not available or wrong RTK installed)
+## Installation (only if rtk-tx not available or wrong rtk installed)
 
-### Step 0: Uninstall Wrong RTK (if needed)
+### Step 0: Uninstall Wrong rtk (if needed)
 
 If you accidentally installed Rust Type Kit:
 
 ```bash
-cargo uninstall rtk
+cargo uninstall rtk-tx
 ```
 
-### Quick Install (Linux/macOS)
+### Source/local installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
-```
-
-After installation, **verify you have the correct rtk**:
-```bash
-rtk gain  # Must show token savings stats (not "command not found")
-```
-
-### Alternative: Manual Installation
-
-```bash
-# From rtk-ai repository (NOT reachingforthejack!)
-cargo install --git https://github.com/rtk-ai/rtk
-
-# OR (if published and correct on crates.io)
-cargo install rtk
+# From this rtk-tx fork checkout (NOT reachingforthejack/rtk!)
+cargo install --path .
 
 # ALWAYS VERIFY after installation
-rtk gain  # MUST show token savings, not "command not found"
+rtk-tx gain  # MUST show token savings, not "command not found"
 ```
 
-⚠️ **WARNING**: `cargo install rtk` from crates.io might install the wrong package. Always verify with `rtk gain`.
+This guide uses source/local install wording until package-manager or release publishing for `rtk-tx` is available in your environment. Avoid `cargo install rtk`; that name can refer to the unrelated Rust Type Kit.
 
 ## Project Initialization
 
@@ -74,25 +60,35 @@ rtk gain  # MUST show token savings, not "command not found"
 ```
   Do you want RTK active across ALL Claude Code projects?
   │
-  ├─ YES → rtk init -g              (recommended)
+  ├─ YES → rtk-tx init -g              (recommended)
   │         Hook + RTK.md (~10 tokens in context)
   │         Commands auto-rewritten transparently
   │
-  ├─ YES, minimal → rtk init -g --hook-only
+  ├─ YES, minimal → rtk-tx init -g --hook-only
   │         Hook only, nothing added to CLAUDE.md
   │         Zero tokens in context
   │
-  └─ NO, single project → rtk init
+  └─ NO, single project → rtk-tx init
             Local CLAUDE.md only (137 lines)
             No hook, no global effect
 ```
+
+For CodeBuddy Code, choose the CodeBuddy-specific settings target instead:
+
+```bash
+rtk-tx init --codebuddy       # project: <project-root>/.codebuddy/settings.json
+rtk-tx init -g --codebuddy    # global: ~/.codebuddy/settings.json
+rtk-tx hook codebuddy         # native hook adapter used in CodeBuddy settings
+```
+
+`rtk-tx` v1 does **not** patch `.codebuddy/settings.local.json`.
 
 ### Recommended: Global Hook-First Setup
 
 **Best for: All projects, automatic RTK usage**
 
 ```bash
-rtk init -g
+rtk-tx init -g
 # → Installs hook to ~/.claude/hooks/rtk-rewrite.sh
 # → Creates ~/.claude/RTK.md (10 lines, meta commands only)
 # → Adds @RTK.md reference to ~/.claude/CLAUDE.md
@@ -100,11 +96,11 @@ rtk init -g
 # → If yes: patches + creates backup (~/.claude/settings.json.bak)
 
 # Automated alternatives:
-rtk init -g --auto-patch    # Patch without prompting
-rtk init -g --no-patch      # Print manual instructions instead
+rtk-tx init -g --auto-patch    # Patch without prompting
+rtk-tx init -g --no-patch      # Print manual instructions instead
 
 # Verify installation
-rtk init --show  # Check hook is installed and executable
+rtk-tx init --show  # Check hook is installed and executable
 ```
 
 **Token savings**: ~99.5% reduction (2000 tokens → 10 tokens in context)
@@ -112,19 +108,24 @@ rtk init --show  # Check hook is installed and executable
 **What is settings.json?**
 Claude Code's hook registry. RTK adds a PreToolUse hook that rewrites commands transparently. Without this, Claude won't invoke the hook automatically.
 
+**CodeBuddy settings:**
+CodeBuddy uses Claude-compatible Code hooks. `rtk-tx init --codebuddy` patches `<project-root>/.codebuddy/settings.json`; `rtk-tx init -g --codebuddy` patches `~/.codebuddy/settings.json`. The inserted entry uses `hooks.PreToolUse`, matcher `Bash`, and command `rtk-tx hook codebuddy`. Rewrites are returned with `hookSpecificOutput.updatedInput.command`; for example, `rtk-tx rewrite "git status"` returns `rtk-tx git status`.
+
+After external settings changes, CodeBuddy may require users to review or approve the hook configuration in CodeBuddy's `/hooks` panel before the hook runs.
+
 ```
-  Claude Code          settings.json        rtk-rewrite.sh        RTK binary
+  Claude Code          settings.json        rtk-rewrite.sh        rtk-tx binary
        │                    │                     │                    │
        │  "git status"      │                     │                    │
        │ ──────────────────►│                     │                    │
        │                    │  PreToolUse trigger  │                    │
        │                    │ ───────────────────►│                    │
        │                    │                     │  rewrite command   │
-       │                    │                     │  → rtk git status  │
+       │                    │                     │  → rtk-tx git status  │
        │                    │◄────────────────────│                    │
        │                    │  updated command     │                    │
        │                    │                                          │
-       │  execute: rtk git status                                      │
+       │  execute: rtk-tx git status                                      │
        │ ─────────────────────────────────────────────────────────────►│
        │                                                               │  filter
        │  "3 modified, 1 untracked ✓"                                  │
@@ -143,7 +144,7 @@ cp ~/.claude/settings.json.bak ~/.claude/settings.json
 
 ```bash
 cd /path/to/your/project
-rtk init  # Creates ./CLAUDE.md with full RTK instructions (137 lines)
+rtk-tx init  # Creates ./CLAUDE.md with full RTK instructions (137 lines)
 ```
 
 **Token savings**: Instructions loaded only for this project
@@ -153,7 +154,7 @@ rtk init  # Creates ./CLAUDE.md with full RTK instructions (137 lines)
 #### From old 137-line CLAUDE.md injection (pre-0.22)
 
 ```bash
-rtk init -g  # Automatically migrates to hook-first mode
+rtk-tx init -g  # Automatically migrates to hook-first mode
 # → Removes old 137-line block
 # → Installs hook + RTK.md
 # → Adds @RTK.md reference
@@ -161,16 +162,16 @@ rtk init -g  # Automatically migrates to hook-first mode
 
 #### From old hook with inline logic (pre-0.24) — ⚠️ Breaking Change
 
-RTK 0.24.0 replaced the inline command-detection hook (~200 lines) with a **thin delegator** that calls `rtk rewrite`. The binary now contains the rewrite logic, so adding new commands no longer requires a hook update.
+rtk-tx 0.24.0 replaced the inline command-detection hook (~200 lines) with a **thin delegator** that calls `rtk-tx rewrite`. The binary now contains the rewrite logic, so adding new commands no longer requires a hook update.
 
 The old hook still works but won't benefit from new rules added in future releases.
 
 ```bash
 # Upgrade hook to thin delegator
-rtk init --global
+rtk-tx init --global
 
 # Verify the new hook is active
-rtk init --show
+rtk-tx init --show
 # Should show: ✅ Hook: ... (thin delegator, up to date)
 ```
 
@@ -178,32 +179,46 @@ rtk init --show
 
 ### First-Time User (Recommended)
 ```bash
-# 1. Install RTK
-cargo install --git https://github.com/rtk-ai/rtk
-rtk gain  # Verify (must show token stats)
+# 1. Install rtk-tx
+cargo install --path .
+rtk-tx gain  # Verify (must show token stats)
 
 # 2. Setup with prompts
-rtk init -g
+rtk-tx init -g
 # → Answer 'y' when prompted to patch settings.json
 # → Creates backup automatically
 
 # 3. Restart Claude Code
-# 4. Test: git status (should use rtk)
+# 4. Test: git status (should use rtk-tx)
+```
+
+### CodeBuddy Code User
+```bash
+# Project-scoped setup
+rtk-tx init --codebuddy
+
+# Or global setup for all CodeBuddy projects
+rtk-tx init -g --codebuddy
+
+# Verify rewrite behavior directly
+rtk-tx rewrite "git status"  # -> rtk-tx git status
+
+# If CodeBuddy flags the changed settings, review/approve them in /hooks.
 ```
 
 ### CI/CD or Automation
 ```bash
 # Non-interactive setup (no prompts)
-rtk init -g --auto-patch
+rtk-tx init -g --auto-patch
 
 # Verify in scripts
-rtk init --show | grep "Hook:"
+rtk-tx init --show | grep "Hook:"
 ```
 
 ### Conservative User (Manual Control)
 ```bash
 # Get manual instructions without patching
-rtk init -g --no-patch
+rtk-tx init -g --no-patch
 
 # Review printed JSON snippet
 # Manually edit ~/.claude/settings.json
@@ -213,10 +228,10 @@ rtk init -g --no-patch
 ### Temporary Trial
 ```bash
 # Install hook
-rtk init -g --auto-patch
+rtk-tx init -g --auto-patch
 
 # Later: remove everything
-rtk init -g --uninstall
+rtk-tx init -g --uninstall
 
 # Restore backup if needed
 cp ~/.claude/settings.json.bak ~/.claude/settings.json
@@ -226,16 +241,16 @@ cp ~/.claude/settings.json.bak ~/.claude/settings.json
 
 ```bash
 # Basic test
-rtk ls .
+rtk-tx ls .
 
 # Test with git
-rtk git status
+rtk-tx git status
 
 # Test with pnpm
-rtk pnpm list
+rtk-tx pnpm list
 
 # Test with Vitest
-rtk vitest
+rtk-tx vitest
 ```
 
 ## Uninstalling
@@ -244,7 +259,7 @@ rtk vitest
 
 ```bash
 # Complete removal (global installations only)
-rtk init -g --uninstall
+rtk-tx init -g --uninstall
 
 # What gets removed:
 #   - Hook: ~/.claude/hooks/rtk-rewrite.sh
@@ -261,12 +276,9 @@ rtk init -g --uninstall
 
 ```bash
 # If installed via cargo
-cargo uninstall rtk
+cargo uninstall rtk-tx
 
-# If installed via package manager
-brew uninstall rtk          # macOS Homebrew
-sudo apt remove rtk         # Debian/Ubuntu
-sudo dnf remove rtk         # Fedora/RHEL
+# If installed via another package manager in your environment, use that manager's uninstall command.
 ```
 
 ### Restore from Backup (if needed)
@@ -279,46 +291,46 @@ cp ~/.claude/settings.json.bak ~/.claude/settings.json
 
 ### Files
 ```bash
-rtk ls .              # Compact tree view
-rtk read file.rs      # Optimized reading
-rtk grep "pattern" .  # Grouped search results
+rtk-tx ls .              # Compact tree view
+rtk-tx read file.rs      # Optimized reading
+rtk-tx grep "pattern" .  # Grouped search results
 ```
 
 ### Git
 ```bash
-rtk git status        # Compact status
-rtk git log -n 10     # Condensed logs
-rtk git diff          # Optimized diff
-rtk git add .         # → "ok ✓"
-rtk git commit -m "msg"  # → "ok ✓ abc1234"
-rtk git push          # → "ok ✓ main"
+rtk-tx git status        # Compact status
+rtk-tx git log -n 10     # Condensed logs
+rtk-tx git diff          # Optimized diff
+rtk-tx git add .         # → "ok ✓"
+rtk-tx git commit -m "msg"  # → "ok ✓ abc1234"
+rtk-tx git push          # → "ok ✓ main"
 ```
 
 ### Pnpm (fork only)
 ```bash
-rtk pnpm list         # Dependency tree (-70% tokens)
-rtk pnpm outdated     # Available updates (-80-90%)
-rtk pnpm install pkg  # Silent installation
+rtk-tx pnpm list         # Dependency tree (-70% tokens)
+rtk-tx pnpm outdated     # Available updates (-80-90%)
+rtk-tx pnpm install pkg  # Silent installation
 ```
 
 ### Tests
 ```bash
-rtk cargo test      # Filtered Cargo test output (-90%)
-rtk go test         # Filtered Go tests (NDJSON, -90%)
-rtk jest            # Filtered Jest output (-99.6%)
-rtk vitest          # Filtered Vitest output (-99.6%)
-rtk playwright test # Filtered Playwright output (-94%)
-rtk pytest          # Filtered Python tests (-90%)
-rtk rake test       # Filtered Ruby tests (-90%)
-rtk rspec           # Filtered RSpec tests (-60%)
-rtk test <cmd>      # Generic test wrapper - failures only (-90%)
+rtk-tx cargo test      # Filtered Cargo test output (-90%)
+rtk-tx go test         # Filtered Go tests (NDJSON, -90%)
+rtk-tx jest            # Filtered Jest output (-99.6%)
+rtk-tx vitest          # Filtered Vitest output (-99.6%)
+rtk-tx playwright test # Filtered Playwright output (-94%)
+rtk-tx pytest          # Filtered Python tests (-90%)
+rtk-tx rake test       # Filtered Ruby tests (-90%)
+rtk-tx rspec           # Filtered RSpec tests (-60%)
+rtk-tx test <cmd>      # Generic test wrapper - failures only (-90%)
 ```
 
 ### Statistics
 ```bash
-rtk gain              # Token savings
-rtk gain --graph      # With ASCII graph
-rtk gain --history    # With command history
+rtk-tx gain              # Token savings
+rtk-tx gain --graph      # With ASCII graph
+rtk-tx gain --history    # With command history
 ```
 
 ## Validated Token Savings
@@ -338,7 +350,7 @@ rtk gain --history    # With command history
 
 ## Troubleshooting
 
-### RTK command not found after installation
+### rtk-tx command not found after installation
 ```bash
 # Check PATH
 echo $PATH | grep -o '[^:]*\.cargo[^:]*'
@@ -350,17 +362,12 @@ export PATH="$HOME/.cargo/bin:$PATH"
 source ~/.bashrc  # or source ~/.zshrc
 ```
 
-### RTK command not available (e.g., vitest)
+### rtk-tx command not available (e.g., vitest)
+Rebuild and reinstall from the current `rtk-tx` fork checkout:
+
 ```bash
-# Check branch
-cd /path/to/rtk
-git branch
-
-# Switch to feat/vitest-support if needed
-git checkout feat/vitest-support
-
-# Reinstall
 cargo install --path . --force
+rtk-tx --help
 ```
 
 ### Compilation error
@@ -388,10 +395,10 @@ cargo install --path . --force
 
 Before each session:
 
-- [ ] Verify RTK is installed: `rtk --version`
+- [ ] Verify RTK is installed: `rtk-tx --version`
 - [ ] If not installed → follow "Install from fork"
-- [ ] If project not initialized → `rtk init`
-- [ ] Use `rtk` for ALL git/pnpm/test/vitest commands
-- [ ] Check savings: `rtk gain`
+- [ ] If project not initialized → `rtk-tx init`
+- [ ] Use `rtk-tx` for ALL git/pnpm/test/vitest commands
+- [ ] Check savings: `rtk-tx gain`
 
-**Golden Rule**: AI coding assistants should ALWAYS use `rtk` as a proxy for shell commands that generate verbose output (git, pnpm, npm, cargo test, vitest, docker, kubectl).
+**Golden Rule**: AI coding assistants should ALWAYS use `rtk-tx` as a proxy for shell commands that generate verbose output (git, pnpm, npm, cargo test, vitest, docker, kubectl).

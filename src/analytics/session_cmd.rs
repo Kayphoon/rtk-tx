@@ -27,10 +27,10 @@ impl SessionSummary {
 
 /// Count RTK-covered commands from extracted commands.
 /// A command is "covered" if it either:
-/// - starts with "rtk " (explicit rtk invocation), or
+/// - starts with "rtk-tx " (explicit product invocation), or legacy "rtk ", or
 /// - would be rewritten by the hook (classify_command returns Supported)
 ///
-/// Chained commands (e.g. "cd ./path && rtk ls") are split so each part
+/// Chained commands (e.g. "cd ./path && rtk-tx ls") are split so each part
 /// is classified independently — matching the discover module's behavior.
 fn count_rtk_commands(cmds: &[ExtractedCommand]) -> (usize, usize, usize) {
     let mut total: usize = 0;
@@ -39,7 +39,8 @@ fn count_rtk_commands(cmds: &[ExtractedCommand]) -> (usize, usize, usize) {
         let parts = split_command_chain(&c.command);
         for part in &parts {
             total += 1;
-            if part.starts_with("rtk ")
+            if part.starts_with("rtk-tx ")
+                || part.starts_with("rtk ")
                 || matches!(classify_command(part), Classification::Supported { .. })
             {
                 rtk += 1;

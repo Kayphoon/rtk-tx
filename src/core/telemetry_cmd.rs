@@ -44,6 +44,8 @@ fn run_status() -> Result<()> {
     if env_override {
         println!("  env override:  RTK_TELEMETRY_DISABLED=1 (blocked)");
     }
+    println!("  remote send:   disabled in rtk-tx v1 (no network telemetry)");
+    println!("  local gain:    enabled via local SQLite tracking");
 
     let salt_path = super::telemetry::salt_file_path();
     if salt_path.exists() {
@@ -54,48 +56,16 @@ fn run_status() -> Result<()> {
     }
 
     println!();
-    println!("Data controller: RTK AI Labs, contact@rtk-ai.app");
-    println!("Details: https://github.com/rtk-ai/rtk/blob/main/docs/TELEMETRY.md");
+    println!("Remote telemetry is absent from this rtk-tx v1 fork.");
+    println!("Details: docs/TELEMETRY.md");
 
     Ok(())
 }
 
 fn run_enable() -> Result<()> {
-    use std::io::{self, BufRead, IsTerminal};
-
-    if !io::stdin().is_terminal() {
-        anyhow::bail!(
-            "consent requires interactive terminal — cannot enable telemetry in piped mode"
-        );
-    }
-
-    eprintln!("RTK collects anonymous usage metrics once per day to improve filters.");
-    eprintln!();
-    eprintln!("  What:    command names (not arguments), token savings, OS, version");
-    eprintln!("  Who:     RTK AI Labs, contact@rtk-ai.app");
-    eprintln!("  Details: https://github.com/rtk-ai/rtk/blob/main/docs/TELEMETRY.md");
-    eprintln!();
-    eprint!("Enable anonymous telemetry? [y/N] ");
-
-    let stdin = io::stdin();
-    let mut line = String::new();
-    stdin
-        .lock()
-        .read_line(&mut line)
-        .context("Failed to read user input")?;
-
-    let accepted = {
-        let response = line.trim().to_lowercase();
-        response == "y" || response == "yes"
-    };
-
-    crate::hooks::init::save_telemetry_consent(accepted)?;
-
-    if accepted {
-        println!("Telemetry enabled. Disable anytime: rtk telemetry disable");
-    } else {
-        println!("Telemetry not enabled.");
-    }
+    crate::hooks::init::save_telemetry_consent(false)?;
+    println!("Remote telemetry is disabled/absent in rtk-tx v1.");
+    println!("No network sending was enabled. Local SQLite tracking/gain remains available.");
 
     Ok(())
 }
@@ -112,13 +82,6 @@ fn run_forget() -> Result<()> {
     let salt_path = super::telemetry::salt_file_path();
     let marker_path = super::telemetry::telemetry_marker_path();
 
-    // Compute device hash before deleting the salt
-    let device_hash = if salt_path.exists() {
-        Some(super::telemetry::generate_device_hash())
-    } else {
-        None
-    };
-
     if salt_path.exists() {
         std::fs::remove_file(&salt_path)
             .with_context(|| format!("Failed to delete {}", salt_path.display()))?;
@@ -129,10 +92,7 @@ fn run_forget() -> Result<()> {
     }
 
     // Purge local tracking database (GDPR Art. 17 — right to erasure applies to local data too)
-    let db_path = dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(super::constants::RTK_DATA_DIR)
-        .join(super::constants::HISTORY_DB);
+    let db_path = crate::core::tracking::get_db_path()?;
     if db_path.exists() {
         match std::fs::remove_file(&db_path) {
             Ok(()) => println!("Local tracking database deleted: {}", db_path.display()),
@@ -140,44 +100,7 @@ fn run_forget() -> Result<()> {
         }
     }
 
-    // Send server-side erasure request
-    if let Some(hash) = device_hash {
-        match send_erasure_request(&hash) {
-            Ok(()) => {
-                println!("Erasure request sent to server.");
-            }
-            Err(e) => {
-                eprintln!("rtk: could not reach server: {}", e);
-                eprintln!("  To complete erasure, email contact@rtk-ai.app");
-                eprintln!("  with your device hash: {}", hash);
-            }
-        }
-    }
-
     println!("Local telemetry data deleted. Telemetry disabled.");
-    Ok(())
-}
-
-fn send_erasure_request(device_hash: &str) -> Result<()> {
-    let url = option_env!("RTK_TELEMETRY_URL");
-    let url = match url {
-        Some(u) => format!("{}/erasure", u),
-        None => anyhow::bail!("no telemetry endpoint configured"),
-    };
-
-    let payload = serde_json::json!({
-        "device_hash": device_hash,
-        "action": "erasure",
-    });
-
-    let mut req = ureq::post(&url).set("Content-Type", "application/json");
-
-    if let Some(token) = option_env!("RTK_TELEMETRY_TOKEN") {
-        req = req.set("X-RTK-Token", token);
-    }
-
-    req.timeout(std::time::Duration::from_secs(5))
-        .send_string(&payload.to_string())?;
-
+    println!("Remote telemetry is disabled/absent in rtk-tx v1; no server erasure request was sent or needed.");
     Ok(())
 }

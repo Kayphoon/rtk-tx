@@ -1054,7 +1054,7 @@ Les sous-commandes non reconnues sont transmises directement ou detectees comme 
 
 RTK enregistre chaque execution de commande dans une base SQLite :
 
-- **Emplacement :** `~/.local/share/rtk/tracking.db` (Linux), `~/Library/Application Support/rtk/tracking.db` (macOS)
+- **Emplacement :** `~/.local/share/rtk-tx/history.db` (Linux), `~/Library/Application Support/rtk-tx/history.db` (macOS)
 - **Retention :** 90 jours automatique
 - **Metriques :** tokens entree/sortie, pourcentage d'economies, temps d'execution, projet
 
@@ -1194,10 +1194,10 @@ settings.json -> PreToolUse hook
 rtk-rewrite.sh (bash)
     |
     v
-rtk rewrite "git status"  ->  "rtk git status"
+rtk-tx rewrite "git status"  ->  "rtk-tx git status"
     |
     v
-Claude Code execute "rtk git status"
+Claude Code execute "rtk-tx git status"
     |
     v
 Sortie filtree retournee a Claude (~10 tokens vs ~200)
@@ -1205,41 +1205,41 @@ Sortie filtree retournee a Claude (~10 tokens vs ~200)
 
 **Points cles :**
 - Claude ne voit jamais la recriture -- il recoit simplement une sortie optimisee
-- Le hook est un delegateur leger (~50 lignes bash) qui appelle `rtk rewrite`
+- Le hook est un delegateur leger (~50 lignes bash) qui appelle `rtk-tx rewrite`
 - Toute la logique de recriture est dans le registre Rust (`src/discover/registry.rs`)
-- Les commandes deja prefixees par `rtk` passent sans modification
+- Les commandes deja prefixees par `rtk-tx` passent sans modification
 - Les heredocs (`<<`) ne sont pas modifies
 - Les commandes non reconnues passent sans modification
 
 ### Installation
 
 ```bash
-rtk init -g                     # Installation recommandee (hook + RTK.md)
-rtk init -g --auto-patch        # Non-interactif (CI/CD)
-rtk init -g --hook-only         # Hook seul, sans RTK.md
-rtk init --show                 # Verifier l'installation
-rtk init -g --uninstall         # Desinstaller
+rtk-tx init -g                     # Installation recommandee (hook + RTK.md)
+rtk-tx init -g --auto-patch        # Non-interactif (CI/CD)
+rtk-tx init -g --hook-only         # Hook seul, sans RTK.md
+rtk-tx init --show                 # Verifier l'installation
+rtk-tx init -g --uninstall         # Desinstaller
 ```
 
 ### Fichiers installes
 
 | Fichier | Description |
 |---------|-------------|
-| `~/.claude/hooks/rtk-rewrite.sh` | Script hook (delegue a `rtk rewrite`) |
+| `~/.claude/hooks/rtk-rewrite.sh` | Script hook (delegue a `rtk-tx rewrite`) |
 | `~/.claude/RTK.md` | Instructions minimales pour le LLM |
 | `~/.claude/settings.json` | Enregistrement du hook PreToolUse |
 
-### `rtk rewrite` -- Recriture de commande
+### `rtk-tx rewrite` -- Recriture de commande
 
 Commande interne utilisee par le hook. Imprime la commande reecrite sur stdout (exit 0) ou sort avec exit 1 si aucun equivalent RTK n'existe.
 
 ```bash
-rtk rewrite "git status"           # -> "rtk git status" (exit 0)
-rtk rewrite "terraform plan"       # -> (exit 1, pas de recriture)
-rtk rewrite "rtk git status"       # -> "rtk git status" (exit 0, inchange)
+rtk-tx rewrite "git status"           # -> "rtk-tx git status" (exit 0)
+rtk-tx rewrite "terraform plan"       # -> (exit 1, pas de recriture)
+rtk-tx rewrite "rtk-tx git status"    # -> "rtk-tx git status" (exit 0, inchange)
 ```
 
-### `rtk verify` -- Verification d'integrite
+### `rtk-tx verify` -- Verification d'integrite
 
 Verifie l'integrite du hook installe via un controle SHA-256.
 
@@ -1292,7 +1292,7 @@ exclude_commands = ["curl", "playwright"]
 
 ### Fichier de configuration
 
-**Emplacement :** `~/.config/rtk/config.toml` (Linux) ou `~/Library/Application Support/rtk/config.toml` (macOS)
+**Emplacement :** `~/.config/rtk-tx/config.toml` (Linux) ou `~/Library/Application Support/rtk-tx/config.toml` (macOS)
 
 **Commandes :**
 ```bash
@@ -1306,7 +1306,7 @@ rtk config --create       # Creer le fichier avec les valeurs par defaut
 [tracking]
 enabled = true              # Activer/desactiver le suivi
 history_days = 90           # Jours de retention (nettoyage automatique)
-database_path = "/custom/path/tracking.db"  # Chemin personnalise (optionnel)
+database_path = "/custom/path/history.db"  # Chemin personnalise (optionnel)
 
 [display]
 colors = true               # Sortie coloree
@@ -1324,8 +1324,8 @@ max_files = 20              # Rotation : garder les N derniers fichiers
 # directory = "/custom/tee/path"  # Chemin personnalise (optionnel)
 
 [telemetry]
-enabled = false             # Telemetrie anonyme (1 ping/jour, requiert consentement)
-# consent_given = true      # Defini automatiquement par `rtk init` ou `rtk telemetry enable`
+enabled = false             # Telemetrie distante desactivee/absente dans rtk-tx v1
+# consent_given = false     # Etat local uniquement
 # consent_date = "..."      # Date du consentement (RFC 3339)
 
 [hooks]
@@ -1336,8 +1336,10 @@ exclude_commands = []       # Commandes a exclure de la recriture automatique
 
 | Variable | Description |
 |----------|-------------|
+| `RTK_TX_DB_PATH` | Surcharge le chemin de la base SQLite locale |
+| `RTK_DB_PATH` | Ancien fallback deprecie pour la base SQLite locale |
 | `RTK_TEE_DIR` | Surcharge le repertoire tee |
-| `RTK_TELEMETRY_DISABLED=1` | Desactiver la telemetrie |
+| `RTK_TELEMETRY_DISABLED=1` | Blocage explicite; la telemetrie distante est deja desactivee |
 | `RTK_HOOK_AUDIT=1` | Activer l'audit du hook |
 | `SKIP_ENV_VALIDATION=1` | Desactiver la validation d'env (Next.js, etc.) |
 
@@ -1351,14 +1353,14 @@ Quand une commande echoue, RTK sauvegarde automatiquement la sortie brute comple
 
 **Fonctionnement :**
 1. La commande echoue (exit code != 0)
-2. RTK sauvegarde la sortie brute dans `~/.local/share/rtk/tee/`
+2. RTK sauvegarde la sortie brute dans `~/.local/share/rtk-tx/tee/`
 3. Le chemin du fichier est affiche dans la sortie filtree
 4. Le LLM peut lire le fichier si besoin de plus de details
 
 **Sortie :**
 ```
 FAILED: 2/15 tests
-[full output: ~/.local/share/rtk/tee/1707753600_cargo_test.log]
+[full output: ~/.local/share/rtk-tx/tee/1707753600_cargo_test.log]
 ```
 
 **Configuration :**
@@ -1375,26 +1377,23 @@ FAILED: 2/15 tests
 
 ## Telemetrie
 
-RTK peut envoyer un ping anonyme une fois par jour (23h d'intervalle) pour des statistiques d'utilisation. La telemetrie est **desactivee par defaut** et requiert un consentement explicite (RGPD Art. 6, 7).
-
-**Donnees envoyees :** hash de device (SHA-256 d'un sel aleatoire), version, OS, architecture, nombre de commandes/24h, top commandes, pourcentage d'economies.
-
-**Responsable du traitement :** `RTK AI Labs`, contact@rtk-ai.app
+rtk-tx v1 n'envoie pas de telemetrie distante. Aucun ping quotidien, aucun endpoint de telemetrie et aucune demande d'effacement serveur ne sont utilises. Le tracking SQLite local pour `rtk-tx gain` reste disponible sur la machine.
 
 **Gerer la telemetrie :**
 ```bash
-rtk telemetry status     # Voir l'etat du consentement
-rtk telemetry enable     # Donner son consentement (prompt interactif)
-rtk telemetry disable    # Retirer son consentement
-rtk telemetry forget     # Retirer + supprimer donnees locales + demande d'effacement serveur
+rtk-tx telemetry status     # Voir l'etat local
+rtk-tx telemetry enable     # La telemetrie distante reste desactivee/absente
+rtk-tx telemetry disable    # Enregistrer l'etat desactive localement
+rtk-tx telemetry forget     # Supprimer sel/marqueur/base locale uniquement
 ```
 
 **Desactiver via variable d'environnement :**
 ```bash
 export RTK_TELEMETRY_DISABLED=1
+export RTK_TX_DB_PATH=/custom/path/history.db
 ```
 
-Aucune donnee personnelle, aucun contenu de commande, aucun chemin de fichier n'est transmis. Conservation serveur : 12 mois max. Details : [docs/TELEMETRY.md](../TELEMETRY.md)
+Aucune donnee personnelle, aucun contenu de commande, aucun chemin de fichier, aucune metrique d'usage et aucun hash de device ne sont transmis. Details : [docs/TELEMETRY.md](../TELEMETRY.md)
 
 ---
 

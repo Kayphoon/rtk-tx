@@ -6,7 +6,7 @@
 //!
 //! # Architecture
 //!
-//! - Storage: SQLite database (~/.local/share/rtk/tracking.db)
+//! - Storage: SQLite database (~/.local/share/rtk-tx/history.db)
 //! - Retention: 90-day automatic cleanup
 //! - Metrics: Input/output tokens, savings %, execution time
 //!
@@ -29,7 +29,7 @@
 //!
 //! See [docs/tracking.md](../docs/tracking.md) for full documentation.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use serde::Serialize;
@@ -72,9 +72,9 @@ use super::constants::{DEFAULT_HISTORY_DAYS, HISTORY_DB, RTK_DATA_DIR};
 ///
 /// # Database Location
 ///
-/// - Linux: `~/.local/share/rtk/tracking.db`
-/// - macOS: `~/Library/Application Support/rtk/tracking.db`
-/// - Windows: `%APPDATA%\rtk\tracking.db`
+/// - Linux: `~/.local/share/rtk-tx/history.db`
+/// - macOS: `~/Library/Application Support/rtk-tx/history.db`
+/// - Windows: `%APPDATA%\rtk-tx\history.db`
 ///
 /// # Examples
 ///
@@ -326,6 +326,56 @@ impl Tracker {
         Ok(Self { conn })
     }
 
+    /// Create an isolated in-memory tracker for tests.
+    #[cfg(test)]
+    pub fn new_in_memory() -> Result<Self> {
+        let conn = Connection::open_in_memory().context("Failed to open in-memory DB")?;
+        let tracker = Self { conn };
+        tracker.init_schema()?;
+        Ok(tracker)
+    }
+
+    fn init_schema(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS commands (
+                id INTEGER PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                original_cmd TEXT NOT NULL,
+                rtk_cmd TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                saved_tokens INTEGER NOT NULL,
+                savings_pct REAL NOT NULL,
+                exec_time_ms INTEGER DEFAULT 0,
+                project_path TEXT DEFAULT ''
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_timestamp ON commands(timestamp)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_project_path_timestamp ON commands(project_path, timestamp)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS parse_failures (
+                id INTEGER PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                raw_command TEXT NOT NULL,
+                error_message TEXT NOT NULL,
+                fallback_succeeded INTEGER NOT NULL DEFAULT 0
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pf_timestamp ON parse_failures(timestamp)",
+            [],
+        )?;
+        Ok(())
+    }
+
     /// Record a command execution with token counts and timing.
     ///
     /// Calculates savings metrics and stores the record in the database.
@@ -395,6 +445,19 @@ impl Tracker {
             "DELETE FROM parse_failures WHERE timestamp < ?1",
             params![cutoff.to_rfc3339()],
         )?;
+        Ok(())
+    }
+
+    /// Delete all tracked data (commands + parse_failures), resetting all stats to zero.
+    pub fn reset_all(&self) -> Result<()> {
+        self.conn
+            .execute_batch(
+                "BEGIN;
+                 DELETE FROM commands;
+                 DELETE FROM parse_failures;
+                 COMMIT;",
+            )
+            .context("Failed to reset tracking database")?;
         Ok(())
     }
 
@@ -897,7 +960,8 @@ impl Tracker {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
-    /// Count commands since a given timestamp (for telemetry).
+    /// Count commands since a given timestamp (local analytics helper; remote telemetry disabled).
+    #[allow(dead_code)]
     pub fn count_commands_since(&self, since: chrono::DateTime<chrono::Utc>) -> Result<i64> {
         let ts = since.format("%Y-%m-%dT%H:%M:%S").to_string();
         let count: i64 = self.conn.query_row(
@@ -908,7 +972,8 @@ impl Tracker {
         Ok(count)
     }
 
-    /// Get top N commands by frequency (for telemetry).
+    /// Get top N commands by frequency (local analytics helper; remote telemetry disabled).
+    #[allow(dead_code)]
     pub fn top_commands(&self, limit: usize) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
             "SELECT rtk_cmd, COUNT(*) as cnt FROM commands
@@ -922,7 +987,8 @@ impl Tracker {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
-    /// Get overall savings percentage (for telemetry).
+    /// Get overall savings percentage (local analytics helper; remote telemetry disabled).
+    #[allow(dead_code)]
     pub fn overall_savings_pct(&self) -> Result<f64> {
         let (total_input, total_saved): (i64, i64) = self.conn.query_row(
             "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(saved_tokens), 0) FROM commands",
@@ -936,7 +1002,8 @@ impl Tracker {
         }
     }
 
-    /// Get total tokens saved across all tracked commands (for telemetry).
+    /// Get total tokens saved across all tracked commands (local analytics helper; remote telemetry disabled).
+    #[allow(dead_code)]
     pub fn total_tokens_saved(&self) -> Result<i64> {
         let saved: i64 = self.conn.query_row(
             "SELECT COALESCE(SUM(saved_tokens), 0) FROM commands",
@@ -946,7 +1013,8 @@ impl Tracker {
         Ok(saved)
     }
 
-    /// Get tokens saved in the last 24 hours (for telemetry).
+    /// Get tokens saved in the last 24 hours (local analytics helper; remote telemetry disabled).
+    #[allow(dead_code)]
     pub fn tokens_saved_24h(&self, since: chrono::DateTime<chrono::Utc>) -> Result<i64> {
         let ts = since.format("%Y-%m-%dT%H:%M:%S").to_string();
         let saved: i64 = self.conn.query_row(
@@ -958,7 +1026,8 @@ impl Tracker {
     }
 
     /// Top N passthrough commands (0% savings) — commands missing a filter.
-    /// Groups by first word only to avoid leaking arguments into telemetry.
+    /// Groups by first word only; remote telemetry is disabled.
+    #[allow(dead_code)]
     pub fn top_passthrough(&self, limit: usize) -> Result<Vec<(String, i64)>> {
         let mut stmt = self.conn.prepare(
             "SELECT TRIM(SUBSTR(original_cmd, 1, INSTR(original_cmd || ' ', ' ') - 1)) as tool,
@@ -975,6 +1044,7 @@ impl Tracker {
     }
 
     /// Count parse failures in the last 24 hours.
+    #[allow(dead_code)]
     pub fn parse_failures_since(&self, since: chrono::DateTime<chrono::Utc>) -> Result<i64> {
         let ts = since.format("%Y-%m-%dT%H:%M:%S").to_string();
         let count: i64 = self.conn.query_row(
@@ -986,6 +1056,7 @@ impl Tracker {
     }
 
     /// Count commands with low savings (<30%) — filters that need improvement.
+    #[allow(dead_code)]
     pub fn low_savings_commands(&self, limit: usize) -> Result<Vec<(String, f64)>> {
         let mut stmt = self.conn.prepare(
             "SELECT rtk_cmd, AVG(savings_pct) as avg_sav FROM commands
@@ -1004,6 +1075,7 @@ impl Tracker {
     }
 
     /// Average savings percentage per command (unweighted — each command name counts once).
+    #[allow(dead_code)]
     pub fn avg_savings_per_command(&self) -> Result<f64> {
         let avg: f64 = self.conn.query_row(
             "SELECT COALESCE(AVG(avg_sav), 0.0) FROM (
@@ -1018,6 +1090,7 @@ impl Tracker {
     }
 
     /// Count invocations of a specific meta-command (by rtk_cmd suffix).
+    #[allow(dead_code)]
     pub fn count_meta_command(&self, name: &str) -> Result<i64> {
         let pattern = format!("rtk {}", name);
         let count: i64 = self.conn.query_row(
@@ -1029,6 +1102,7 @@ impl Tracker {
     }
 
     /// Days since first recorded command (installation age).
+    #[allow(dead_code)]
     pub fn first_seen_days(&self) -> Result<i64> {
         let oldest: Option<String> =
             match self
@@ -1053,6 +1127,7 @@ impl Tracker {
     }
 
     /// Number of distinct active days in the last 30 days.
+    #[allow(dead_code)]
     pub fn active_days_30d(&self) -> Result<i64> {
         let since = (chrono::Utc::now() - chrono::Duration::days(30))
             .format("%Y-%m-%dT%H:%M:%S")
@@ -1066,6 +1141,7 @@ impl Tracker {
     }
 
     /// Total number of recorded commands.
+    #[allow(dead_code)]
     pub fn commands_total(&self) -> Result<i64> {
         let count: i64 = self
             .conn
@@ -1074,6 +1150,7 @@ impl Tracker {
     }
 
     /// Ecosystem distribution as percentages (top categories by command prefix).
+    #[allow(dead_code)]
     pub fn ecosystem_mix(&self) -> Result<Vec<(String, f64)>> {
         let total: f64 = self.conn.query_row(
             "SELECT COUNT(*) FROM commands WHERE input_tokens > 0 AND timestamp >= datetime('now', '-90 days')",
@@ -1109,6 +1186,7 @@ impl Tracker {
     }
 
     /// Tokens saved in the last 30 days.
+    #[allow(dead_code)]
     pub fn tokens_saved_30d(&self) -> Result<i64> {
         let since = (chrono::Utc::now() - chrono::Duration::days(30))
             .format("%Y-%m-%dT%H:%M:%S")
@@ -1122,6 +1200,7 @@ impl Tracker {
     }
 
     /// Number of distinct project paths.
+    #[allow(dead_code)]
     pub fn projects_count(&self) -> Result<i64> {
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(DISTINCT project_path) FROM commands WHERE project_path != ''",
@@ -1132,7 +1211,8 @@ impl Tracker {
     }
 }
 
-/// Map an rtk_cmd to an ecosystem category for telemetry.
+/// Map an rtk_cmd to an ecosystem category for local analytics helpers.
+#[allow(dead_code)]
 fn categorize_command(rtk_cmd: &str) -> String {
     let parts: Vec<&str> = rtk_cmd.split_whitespace().collect();
     let tool = parts.get(1).copied().unwrap_or("other");
@@ -1153,20 +1233,25 @@ fn categorize_command(rtk_cmd: &str) -> String {
     .to_string()
 }
 
-fn get_db_path() -> Result<PathBuf> {
-    // Priority 1: Environment variable RTK_DB_PATH
+pub(crate) fn get_db_path() -> Result<PathBuf> {
+    // Priority 1: Environment variable RTK_TX_DB_PATH
+    if let Ok(custom_path) = std::env::var("RTK_TX_DB_PATH") {
+        return Ok(PathBuf::from(custom_path));
+    }
+
+    // Priority 2: Deprecated legacy environment variable RTK_DB_PATH
     if let Ok(custom_path) = std::env::var("RTK_DB_PATH") {
         return Ok(PathBuf::from(custom_path));
     }
 
-    // Priority 2: Configuration file
+    // Priority 3: Configuration file
     if let Ok(config) = crate::core::config::Config::load() {
         if let Some(db_path) = config.tracking.database_path {
             return Ok(db_path);
         }
     }
 
-    // Priority 3: Default platform-specific location
+    // Priority 4: Default platform-specific location
     let data_dir = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
     Ok(data_dir.join(RTK_DATA_DIR).join(HISTORY_DB))
 }
@@ -1480,30 +1565,36 @@ mod tests {
         assert_eq!(pt.saved_tokens, 0);
     }
 
-    // 7. get_db_path respects environment variable RTK_DB_PATH
+    // 7. get_db_path respects environment variable RTK_TX_DB_PATH
+    // 8. get_db_path falls back to default when no custom config
+    // Combined into one test to avoid env var race between parallel tests
     #[test]
-    fn test_custom_db_path_env() {
+    fn test_db_path_env_and_default() {
         use std::env;
+        use std::sync::Mutex;
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap();
 
-        let custom_path = env::temp_dir().join("rtk_test_custom.db");
+        let custom_path = env::temp_dir().join("rtk_tx_test_custom.db");
+        let legacy_path = env::temp_dir().join("rtk_test_legacy.db");
+        env::remove_var("RTK_DB_PATH");
+        env::set_var("RTK_TX_DB_PATH", &custom_path);
+        env::set_var("RTK_DB_PATH", &legacy_path);
+        let db_path = get_db_path().expect("Failed to get db path");
+        assert_eq!(db_path, custom_path);
+
+        env::remove_var("RTK_TX_DB_PATH");
         env::set_var("RTK_DB_PATH", &custom_path);
-
         let db_path = get_db_path().expect("Failed to get db path");
         assert_eq!(db_path, custom_path);
 
         env::remove_var("RTK_DB_PATH");
-    }
-
-    // 8. get_db_path falls back to default when no custom config
-    #[test]
-    fn test_default_db_path() {
-        use std::env;
-
-        // Ensure no env var is set
-        env::remove_var("RTK_DB_PATH");
-
         let db_path = get_db_path().expect("Failed to get db path");
-        assert!(db_path.ends_with("rtk/history.db"));
+        assert!(
+            db_path.ends_with("rtk-tx/history.db"),
+            "expected default path ending with rtk-tx/history.db, got: {}",
+            db_path.display()
+        );
     }
 
     // 9. project_filter_params uses GLOB pattern with * wildcard // added
@@ -1583,5 +1674,45 @@ mod tests {
         // We can't assert exact rate because other tests may have added records,
         // but we can verify recovery_rate is between 0 and 100
         assert!(summary.recovery_rate >= 0.0 && summary.recovery_rate <= 100.0);
+    }
+
+    #[test]
+    fn test_reset_all_clears_both_tables() {
+        let tracker = Tracker::new_in_memory().expect("Failed to create in-memory tracker");
+        let pid = std::process::id();
+
+        // Insert into commands
+        tracker
+            .record(
+                "git status",
+                &format!("rtk git status reset_test_{}", pid),
+                100,
+                20,
+                50,
+            )
+            .expect("Failed to record command");
+
+        // Insert into parse_failures
+        tracker
+            .record_parse_failure(&format!("bad_cmd_reset_test_{}", pid), "parse error", false)
+            .expect("Failed to record parse failure");
+
+        // Reset everything
+        tracker.reset_all().expect("Failed to reset");
+
+        // Both tables should be empty
+        let summary = tracker.get_summary().expect("Failed to get summary");
+        assert_eq!(
+            summary.total_commands, 0,
+            "commands table should be empty after reset"
+        );
+
+        let failures = tracker
+            .get_parse_failure_summary()
+            .expect("Failed to get failure summary");
+        assert_eq!(
+            failures.total, 0,
+            "parse_failures table should be empty after reset"
+        );
     }
 }

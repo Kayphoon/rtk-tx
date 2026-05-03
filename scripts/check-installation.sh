@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# RTK Installation Verification Script
-# Helps diagnose if you have the correct rtk (Token Killer) installed
+# rtk-tx Installation Verification Script
+# Helps diagnose if you have the correct rtk-tx (Token Killer) installed
 
 set -e
 
@@ -10,42 +10,42 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo "═══════════════════════════════════════════════════════════"
-echo "           RTK Installation Verification"
+echo "           rtk-tx Installation Verification"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 
-# Check 1: RTK installed?
-echo "1. Checking if RTK is installed..."
-if command -v rtk &> /dev/null; then
-    echo -e "   ${GREEN}✅ RTK is installed${NC}"
-    RTK_PATH=$(which rtk)
+# Check 1: rtk-tx installed?
+echo "1. Checking if rtk-tx is installed..."
+if command -v rtk-tx &> /dev/null; then
+    echo -e "   ${GREEN}✅ rtk-tx is installed${NC}"
+    RTK_PATH=$(which rtk-tx)
     echo "   Location: $RTK_PATH"
 else
-    echo -e "   ${RED}❌ RTK is NOT installed${NC}"
+    echo -e "   ${RED}❌ rtk-tx is NOT installed${NC}"
     echo ""
-    echo "   Install with:"
-    echo "   curl -fsSL https://github.com/rtk-ai/rtk/blob/master/install.sh| sh"
+    echo "   Install from this fork checkout with:"
+    echo "   cargo install --path ."
     exit 1
 fi
 echo ""
 
-# Check 2: RTK version
-echo "2. Checking RTK version..."
-RTK_VERSION=$(rtk --version 2>/dev/null || echo "unknown")
+# Check 2: rtk-tx version
+echo "2. Checking rtk-tx version..."
+RTK_VERSION=$(rtk-tx --version 2>/dev/null || echo "unknown")
 echo "   Version: $RTK_VERSION"
 echo ""
 
 # Check 3: Is it Token Killer or Type Kit?
 echo "3. Verifying this is Token Killer (not Type Kit)..."
-if rtk gain &>/dev/null || rtk gain --help &>/dev/null; then
+if rtk-tx gain &>/dev/null || rtk-tx gain --help &>/dev/null; then
     echo -e "   ${GREEN}✅ CORRECT - You have Rust Token Killer${NC}"
     CORRECT_RTK=true
 else
     echo -e "   ${RED}❌ WRONG - You have Rust Type Kit (different project!)${NC}"
     echo ""
     echo "   You installed the wrong package. Fix it with:"
-    echo "   cargo uninstall rtk"
-    echo "   curl -fsSL https://github.com/rtk-ai/rtk/blob/master/install.sh | sh"
+    echo "   cargo uninstall rtk-tx"
+    echo "   cargo install --path ."
     CORRECT_RTK=false
 fi
 echo ""
@@ -65,7 +65,7 @@ MISSING_FEATURES=()
 check_command() {
     local cmd=$1
     local name=$2
-    if rtk --help 2>/dev/null | grep -qw "$cmd"; then
+    if rtk-tx --help 2>/dev/null | grep -qw "$cmd"; then
         echo -e "   ${GREEN}✅${NC} $name"
         FEATURES+=("$name")
     else
@@ -99,7 +99,7 @@ if [ -f "$HOME/.claude/CLAUDE.md" ] && grep -q "rtk" "$HOME/.claude/CLAUDE.md"; 
     GLOBAL_INIT=true
 else
     echo -e "   ${YELLOW}⚠️${NC}  Global CLAUDE.md not initialized"
-    echo "      Run: rtk init --global"
+    echo "      Run: rtk-tx init --global"
 fi
 
 if [ -f "./CLAUDE.md" ] && grep -q "rtk" "./CLAUDE.md"; then
@@ -107,12 +107,30 @@ if [ -f "./CLAUDE.md" ] && grep -q "rtk" "./CLAUDE.md"; then
     LOCAL_INIT=true
 else
     echo -e "   ${YELLOW}⚠️${NC}  Local CLAUDE.md not initialized in current directory"
-    echo "      Run: rtk init (in your project directory)"
+    echo "      Run: rtk-tx init (in your project directory)"
 fi
 echo ""
 
-# Check 6: Auto-rewrite hook
-echo "6. Checking auto-rewrite hook (optional but recommended)..."
+# Check 6: CodeBuddy integration
+echo "6. Checking CodeBuddy integration..."
+CODEBUDDY_INIT=false
+if [ -f "./.codebuddy/settings.json" ] && grep -q "rtk-tx hook codebuddy" "./.codebuddy/settings.json"; then
+    echo -e "   ${GREEN}✅${NC} Project CodeBuddy settings initialized (./.codebuddy/settings.json)"
+    CODEBUDDY_INIT=true
+elif [ -f "$HOME/.codebuddy/settings.json" ] && grep -q "rtk-tx hook codebuddy" "$HOME/.codebuddy/settings.json"; then
+    echo -e "   ${GREEN}✅${NC} Global CodeBuddy settings initialized (~/.codebuddy/settings.json)"
+    CODEBUDDY_INIT=true
+else
+    echo -e "   ${YELLOW}⚠️${NC}  CodeBuddy settings not initialized"
+    echo "      Run: rtk-tx init --codebuddy (project)"
+    echo "      Or:  rtk-tx init -g --codebuddy (global)"
+    echo "      Note: .codebuddy/settings.local.json is not patched by rtk-tx v1"
+fi
+echo "      If CodeBuddy reports externally changed hooks, review/approve them in /hooks."
+echo ""
+
+# Check 7: Auto-rewrite hook
+echo "7. Checking auto-rewrite hook (optional but recommended)..."
 if [ -f "$HOME/.claude/hooks/rtk-rewrite.sh" ]; then
     echo -e "   ${GREEN}✅${NC} Hook script installed"
     if [ -f "$HOME/.claude/settings.json" ] && grep -q "rtk-rewrite.sh" "$HOME/.claude/settings.json"; then
@@ -140,21 +158,24 @@ if [ ${#MISSING_FEATURES[@]} -gt 0 ]; then
         echo "  - $feature"
     done
     echo ""
-    echo "To get all features, install the fork:"
-    echo "  cargo uninstall rtk"
-    echo "  curl -fsSL https://github.com/rtk-ai/rtk/blob/master/install.sh | sh"
-    echo "  cd rtk && git checkout feat/all-features"
+    echo "To get all features, install the fork from this checkout:"
+    echo "  cargo uninstall rtk-tx"
     echo "  cargo install --path . --force"
 else
-    echo -e "${GREEN}✅ Full-featured RTK installation detected${NC}"
+    echo -e "${GREEN}✅ Full-featured rtk-tx installation detected${NC}"
 fi
 
 echo ""
 
 if [ "$GLOBAL_INIT" = false ] && [ "$LOCAL_INIT" = false ]; then
-    echo -e "${YELLOW}⚠️  RTK not initialized for Claude Code${NC}"
-    echo "   Run: rtk init --global (for all projects)"
-    echo "   Or:  rtk init (for this project only)"
+    echo -e "${YELLOW}⚠️  rtk-tx not initialized for Claude Code${NC}"
+    echo "   Run: rtk-tx init --global (for all projects)"
+    echo "   Or:  rtk-tx init (for this project only)"
+fi
+
+if [ "$CODEBUDDY_INIT" = false ]; then
+    echo -e "${YELLOW}ℹ️  CodeBuddy setup is optional${NC}"
+    echo "   Run: rtk-tx init --codebuddy or rtk-tx init -g --codebuddy"
 fi
 
 echo ""

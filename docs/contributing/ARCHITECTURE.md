@@ -137,7 +137,7 @@ SQLite INSERT:
   • savings_pct: 96.0
   • timestamp: now()
 
-Database: ~/.local/share/rtk/history.db
+Database: ~/.local/share/rtk-tx/history.db
 ```
 
 ### Verbosity Levels
@@ -665,7 +665,7 @@ Flow:
 
 4. STORAGE
    ───────
-   Database: ~/.local/share/rtk/history.db
+Database: ~/.local/share/rtk-tx/history.db
 
    Schema:
    ┌─────────────────────────────────────────┐
@@ -874,7 +874,7 @@ Modules with Exit Code Preservation:
 
 > For config file format, tee settings, tracking database path, and TOML filter tiers, see [src/core/README.md](src/core/README.md).
 
-Two tiers: **User settings** (`~/.config/rtk/config.toml`) and **LLM integration** (CLAUDE.md via `rtk init`).
+Two tiers: **User settings** (`~/.config/rtk-tx/config.toml`) and **LLM integration** (CLAUDE.md via `rtk-tx init`).
 
 ### Initialization Flow
 
@@ -886,7 +886,7 @@ Two tiers: **User settings** (`~/.config/rtk/config.toml`) and **LLM integration
 $ rtk init [--global]
       ↓
 Check existing CLAUDE.md:
-  • --global? → ~/.config/rtk/CLAUDE.md
+• --global? → ~/.config/rtk-tx/CLAUDE.md
   • else      → ./CLAUDE.md
       ↓
       ├─ Exists? → Warn user, ask to overwrite

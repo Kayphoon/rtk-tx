@@ -48,39 +48,30 @@ rtk는 명령 출력이 LLM 컨텍스트에 도달하기 전에 필터링하고 
 
 ## 설치
 
-### Homebrew (권장)
+### Source/local install
 
 ```bash
-brew install rtk
+# From a local rtk-tx fork checkout
+cargo install --path .
 ```
 
-### 빠른 설치 (Linux/macOS)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-```
-
-### Cargo
-
-```bash
-cargo install --git https://github.com/rtk-ai/rtk
-```
+> This fork documents source/local installation until package-manager or release publishing for `rtk-tx` is available in your environment.
 
 ### 확인
 
 ```bash
-rtk --version   # "rtk 0.27.x" 표시되어야 함
-rtk gain        # 토큰 절약 통계 표시되어야 함
+rtk-tx --version   # "rtk-tx 0.34.3" 표시되어야 함
+rtk-tx gain        # 토큰 절약 통계 표시되어야 함
 ```
 
 ## 빠른 시작
 
 ```bash
 # 1. Claude Code용 hook 설치 (권장)
-rtk init --global
+rtk-tx init --global
 
 # 2. Claude Code 재시작 후 테스트
-git status  # 자동으로 rtk git status로 재작성
+git status  # 자동으로 rtk-tx git status로 재작성
 ```
 
 ## 작동 원리

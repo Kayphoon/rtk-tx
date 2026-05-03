@@ -2,9 +2,9 @@
 
 ## Scope
 
-**Deployed hook artifacts** — the actual files installed on user machines by `rtk init`. These are shell scripts, TypeScript plugins, and rules files that run outside the Rust binary. They are **thin delegates**: parse agent-specific JSON, call `rtk rewrite` as a subprocess, format agent-specific response. Zero filtering logic lives here.
+**Deployed hook artifacts** — the actual files installed on user machines by `rtk-tx init`. These are shell scripts, TypeScript plugins, and rules files that run outside the Rust binary. They are **thin delegates**: parse agent-specific JSON, call `rtk-tx rewrite` as a subprocess, format agent-specific response. Zero filtering logic lives here.
 
-Owns: per-agent hook scripts and configuration files for 7 supported agents (Claude Code, Copilot, Cursor, Cline, Windsurf, Codex, OpenCode).
+Owns: per-agent hook scripts and configuration files for supported agents (Claude Code, CodeBuddy Code, Copilot, Cursor, Cline, Windsurf, Codex, OpenCode, and related rule/plugin integrations).
 
 Does **not** own: hook installation/uninstallation (that's `src/hooks/init.rs`), the rewrite pattern registry (that's `discover/registry`), or integrity verification (that's `src/hooks/integrity.rs`).
 
@@ -12,7 +12,7 @@ Relationship to `src/hooks/`: that component **creates** these files; this direc
 
 ## Purpose
 
-LLM agent integrations that intercept CLI commands and route them through RTK for token optimization. Each hook transparently rewrites raw commands (e.g., `git status`) to their RTK equivalents (e.g., `rtk git status`), delivering 60-90% token savings without requiring the agent or user to change their workflow.
+LLM agent integrations that intercept CLI commands and route them through RTK for token optimization. Each hook transparently rewrites raw commands (e.g., `git status`) to their RTK equivalents (e.g., `rtk-tx git status`), delivering 60-90% token savings without requiring the agent or user to change their workflow.
 
 ## How It Works
 
@@ -20,14 +20,14 @@ LLM agent integrations that intercept CLI commands and route them through RTK fo
 Agent runs command (e.g., "cargo test --nocapture")
   -> Hook intercepts (PreToolUse / plugin event)
   -> Reads JSON input, extracts command string
-  -> Calls `rtk rewrite "cargo test --nocapture"`
-  -> Registry matches pattern, returns "rtk cargo test --nocapture"
+  -> Calls `rtk-tx rewrite "cargo test --nocapture"`
+  -> Registry matches pattern, returns "rtk-tx cargo test --nocapture"
   -> Hook sends response in agent-specific JSON format
-  -> Agent executes "rtk cargo test --nocapture" instead
+  -> Agent executes "rtk-tx cargo test --nocapture" instead
   -> Filtered output reaches LLM (~90% fewer tokens)
 ```
 
-All rewrite logic lives in the Rust binary (`src/discover/registry.rs`). Hook scripts are **thin delegates** that handle agent-specific JSON formats and call `rtk rewrite` for the actual decision. This ensures a single source of truth for all 70+ rewrite patterns.
+All rewrite logic lives in the Rust binary (`src/discover/registry.rs`). Hook scripts are **thin delegates** that handle agent-specific JSON formats and call `rtk-tx rewrite` for the actual decision. This ensures a single source of truth for all 70+ rewrite patterns.
 
 ## Directory Structure
 
@@ -46,10 +46,11 @@ Each agent subdirectory has its own README with hook-specific details:
 | Agent | Mechanism | Hook Type | Can Modify Command? |
 |-------|-----------|-----------|---------------------|
 | Claude Code | Shell hook (`PreToolUse`) | Transparent rewrite | Yes (`updatedInput`) |
-| VS Code Copilot Chat | Rust binary (`rtk hook copilot`) | Transparent rewrite | Yes (`updatedInput`) |
-| GitHub Copilot CLI | Rust binary (`rtk hook copilot`) | Deny-with-suggestion | No (agent retries) |
+| CodeBuddy Code | Rust binary (`rtk-tx hook codebuddy`) | Transparent rewrite | Yes (`hookSpecificOutput.updatedInput.command`) |
+| VS Code Copilot Chat | Rust binary (`rtk-tx hook copilot`) | Transparent rewrite | Yes (`updatedInput`) |
+| GitHub Copilot CLI | Rust binary (`rtk-tx hook copilot`) | Deny-with-suggestion | No (agent retries) |
 | Cursor | Shell hook (`preToolUse`) | Transparent rewrite | Yes (`updated_input`) |
-| Gemini CLI | Rust binary (`rtk hook gemini`) | Transparent rewrite | Yes (`hookSpecificOutput`) |
+| Gemini CLI | Rust binary (`rtk-tx hook gemini`) | Transparent rewrite | Yes (`hookSpecificOutput`) |
 | Cline / Roo Code | Custom instructions (rules file) | Prompt-level guidance | N/A |
 | Windsurf | Custom instructions (rules file) | Prompt-level guidance | N/A |
 | Codex CLI | AGENTS.md / instructions | Prompt-level guidance | N/A |
@@ -74,7 +75,34 @@ Each agent subdirectory has its own README with hook-specific details:
     "hookEventName": "PreToolUse",
     "permissionDecision": "allow",
     "permissionDecisionReason": "RTK auto-rewrite",
-    "updatedInput": { "command": "rtk git status" }
+    "updatedInput": { "command": "rtk-tx git status" }
+  }
+}
+```
+
+### CodeBuddy Code (Rust Binary)
+
+**Install:**
+```bash
+rtk-tx init --codebuddy       # project: <project-root>/.codebuddy/settings.json
+rtk-tx init -g --codebuddy    # global: ~/.codebuddy/settings.json
+rtk-tx hook codebuddy         # adapter command stored in settings
+```
+
+CodeBuddy Code hooks are Claude-compatible. The settings entry uses `hooks.PreToolUse`, matcher `Bash`, and command `rtk-tx hook codebuddy`. `rtk-tx` v1 does **not** patch `.codebuddy/settings.local.json`.
+
+After external settings changes, CodeBuddy may require users to review or approve the hook configuration in CodeBuddy's `/hooks` panel before the hook runs.
+
+**Input** (stdin): same as Claude Code.
+
+**Output** (stdout, when rewritten):
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow",
+    "permissionDecisionReason": "RTK auto-rewrite",
+    "updatedInput": { "command": "rtk-tx git status" }
   }
 }
 ```
@@ -87,7 +115,7 @@ Each agent subdirectory has its own README with hook-specific details:
 ```json
 {
   "permission": "allow",
-  "updated_input": { "command": "rtk git status" }
+  "updated_input": { "command": "rtk-tx git status" }
 }
 ```
 
@@ -107,7 +135,7 @@ Returns `{}` when no rewrite (Cursor requires JSON for all paths).
 ```json
 {
   "permissionDecision": "deny",
-  "permissionDecisionReason": "Token savings: use `rtk git status` instead"
+  "permissionDecisionReason": "Token savings: use `rtk-tx git status` instead"
 }
 ```
 
@@ -138,7 +166,7 @@ Returns `{}` when no rewrite (Cursor requires JSON for all paths).
 {
   "decision": "allow",
   "hookSpecificOutput": {
-    "tool_input": { "command": "rtk git status" }
+    "tool_input": { "command": "rtk-tx git status" }
   }
 }
 ```
@@ -149,7 +177,7 @@ Returns `{}` when no rewrite (Cursor requires JSON for all paths).
 
 Mutates `args.command` in-place via the zx library:
 ```typescript
-const result = await $`rtk rewrite ${command}`.quiet().nothrow()
+const result = await $`rtk-tx rewrite ${command}`.quiet().nothrow()
 const rewritten = String(result.stdout).trim()
 if (rewritten && rewritten !== command) {
   (args as Record<string, unknown>).command = rewritten
@@ -179,13 +207,13 @@ The registry handles `&&`, `||`, `;`, `|`, and `&` operators:
 - **And/Or/Semicolon** (`&&`, `||`, `;`): Both sides rewritten independently
 - **find/fd in pipes**: Never rewritten (output format incompatible with xargs/wc/grep)
 
-Example: `cargo fmt --all && cargo test` becomes `rtk cargo fmt --all && rtk cargo test`
+Example: `cargo fmt --all && cargo test` becomes `rtk-tx cargo fmt --all && rtk-tx cargo test`
 
 ### Override Controls
 
 - **`RTK_DISABLED=1`**: Per-command override (`RTK_DISABLED=1 git status` runs raw)
-- **`exclude_commands`**: In `~/.config/rtk/config.toml`, list commands to never rewrite. Matches against the full command after stripping env prefixes. Subcommand patterns work (`"git push"` excludes `git push origin main`). Patterns starting with `^` are treated as regex.
-- **Already-RTK**: `rtk git status` passes through unchanged (no `rtk rtk git`)
+- **`exclude_commands`**: In `~/.config/rtk-tx/config.toml`, list commands to never rewrite. Matches against the full command after stripping env prefixes. Subcommand patterns work (`"git push"` excludes `git push origin main`). Patterns starting with `^` are treated as regex.
+- **Already-RTK**: `rtk-tx git status` passes through unchanged (no `rtk-tx rtk-tx git`)
 
 ## Exit Code Contract
 
@@ -202,10 +230,10 @@ When there is no rewrite to apply, the hook must produce no output (or `{}` for 
 Hooks are **non-blocking** -- they never prevent a command from executing:
 
 - jq not installed: warning to stderr, exit 0 (command runs raw)
-- rtk binary not found: warning to stderr, exit 0
+- rtk-tx binary not found: warning to stderr, exit 0
 - rtk version too old (< 0.23.0): warning to stderr, exit 0
 - Invalid JSON input: pass through unchanged
-- `rtk rewrite` crashes: hook exits 0 (subprocess error ignored)
+- `rtk-tx rewrite` crashes: hook exits 0 (subprocess error ignored)
 - Filter logic error: fallback to raw command output
 
 ## Adding a New Agent Integration
@@ -232,4 +260,3 @@ RTK supports AI coding assistants that developers actually use day-to-day. To ad
 ### Maintenance
 
 If an agent's API changes and the hook breaks, the integration should be updated promptly. If the agent becomes unmaintained or the hook can't be fixed, the integration may be deprecated with a release note.
-

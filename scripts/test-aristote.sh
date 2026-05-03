@@ -79,9 +79,9 @@ section() {
 
 # ── Preamble ─────────────────────────────────────────
 
-RTK=$(command -v rtk || echo "")
+RTK=$(command -v rtk-tx || echo "")
 if [[ -z "$RTK" ]]; then
-    echo "rtk not found in PATH. Run: cargo install --path ."
+    echo "rtk-tx not found in PATH. Run: cargo install --path ."
     exit 1
 fi
 
@@ -91,7 +91,7 @@ if [[ ! -d "$ARISTOTE" ]]; then
 fi
 
 printf "${BOLD}RTK Smoke Tests — Aristote Project${NC}\n"
-printf "Binary: %s (%s)\n" "$RTK" "$(rtk --version)"
+printf "Binary: %s (%s)\n" "$RTK" "$(rtk-tx --version)"
 printf "Project: %s\n" "$ARISTOTE"
 printf "Date: %s\n\n" "$(date '+%Y-%m-%d %H:%M')"
 
@@ -99,70 +99,70 @@ printf "Date: %s\n\n" "$(date '+%Y-%m-%d %H:%M')"
 
 section "Ls & Find"
 
-assert_ok       "rtk ls project root"           rtk ls "$ARISTOTE"
-assert_ok       "rtk ls src/"                   rtk ls "$ARISTOTE/src"
-assert_ok       "rtk ls --depth 3"              rtk ls --depth 3 "$ARISTOTE/src"
-assert_contains "rtk ls shows components/"      "components" rtk ls "$ARISTOTE/src"
-assert_ok       "rtk find *.tsx"                rtk find "*.tsx" "$ARISTOTE/src"
-assert_ok       "rtk find *.ts"                 rtk find "*.ts" "$ARISTOTE/src"
-assert_contains "rtk find finds App.tsx"        "App.tsx" rtk find "*.tsx" "$ARISTOTE/src"
+assert_ok       "rtk-tx ls project root"           rtk-tx ls "$ARISTOTE"
+assert_ok       "rtk-tx ls src/"                   rtk-tx ls "$ARISTOTE/src"
+assert_ok       "rtk-tx ls --depth 3"              rtk-tx ls --depth 3 "$ARISTOTE/src"
+assert_contains "rtk-tx ls shows components/"      "components" rtk-tx ls "$ARISTOTE/src"
+assert_ok       "rtk-tx find *.tsx"                rtk-tx find "*.tsx" "$ARISTOTE/src"
+assert_ok       "rtk-tx find *.ts"                 rtk-tx find "*.ts" "$ARISTOTE/src"
+assert_contains "rtk-tx find finds App.tsx"        "App.tsx" rtk-tx find "*.tsx" "$ARISTOTE/src"
 
 # ── 2. Read ──────────────────────────────────────────
 
 section "Read"
 
-assert_ok       "rtk read tsconfig.json"        rtk read "$ARISTOTE/tsconfig.json"
-assert_ok       "rtk read package.json"         rtk read "$ARISTOTE/package.json"
-assert_ok       "rtk read App.tsx"              rtk read "$ARISTOTE/src/App.tsx"
-assert_ok       "rtk read --level aggressive"   rtk read --level aggressive "$ARISTOTE/src/App.tsx"
-assert_ok       "rtk read --max-lines 10"       rtk read --max-lines 10 "$ARISTOTE/src/App.tsx"
+assert_ok       "rtk-tx read tsconfig.json"        rtk-tx read "$ARISTOTE/tsconfig.json"
+assert_ok       "rtk-tx read package.json"         rtk-tx read "$ARISTOTE/package.json"
+assert_ok       "rtk-tx read App.tsx"              rtk-tx read "$ARISTOTE/src/App.tsx"
+assert_ok       "rtk-tx read --level aggressive"   rtk-tx read --level aggressive "$ARISTOTE/src/App.tsx"
+assert_ok       "rtk-tx read --max-lines 10"       rtk-tx read --max-lines 10 "$ARISTOTE/src/App.tsx"
 
 # ── 3. Grep ──────────────────────────────────────────
 
 section "Grep"
 
-assert_ok       "rtk grep import"               rtk grep "import" "$ARISTOTE/src"
-assert_ok       "rtk grep with type filter"     rtk grep "useState" "$ARISTOTE/src" -t tsx
-assert_contains "rtk grep finds components"     "import" rtk grep "import" "$ARISTOTE/src"
+assert_ok       "rtk-tx grep import"               rtk-tx grep "import" "$ARISTOTE/src"
+assert_ok       "rtk-tx grep with type filter"     rtk-tx grep "useState" "$ARISTOTE/src" -t tsx
+assert_contains "rtk-tx grep finds components"     "import" rtk-tx grep "import" "$ARISTOTE/src"
 
 # ── 4. Git ───────────────────────────────────────────
 
 section "Git (in Aristote repo)"
 
-# rtk git doesn't support -C, use git -C via subshell
-assert_ok       "rtk git status"                bash -c "cd $ARISTOTE && rtk git status"
-assert_ok       "rtk git log"                   bash -c "cd $ARISTOTE && rtk git log"
-assert_ok       "rtk git branch"                bash -c "cd $ARISTOTE && rtk git branch"
+# rtk-tx git doesn't support -C, use git -C via subshell
+assert_ok       "rtk-tx git status"                bash -c "cd $ARISTOTE && rtk-tx git status"
+assert_ok       "rtk-tx git log"                   bash -c "cd $ARISTOTE && rtk-tx git log"
+assert_ok       "rtk-tx git branch"                bash -c "cd $ARISTOTE && rtk-tx git branch"
 
 # ── 5. Deps ──────────────────────────────────────────
 
 section "Deps"
 
-assert_ok       "rtk deps"                      rtk deps "$ARISTOTE"
-assert_contains "rtk deps shows package.json"   "package.json" rtk deps "$ARISTOTE"
+assert_ok       "rtk-tx deps"                      rtk-tx deps "$ARISTOTE"
+assert_contains "rtk-tx deps shows package.json"   "package.json" rtk-tx deps "$ARISTOTE"
 
 # ── 6. Json ──────────────────────────────────────────
 
 section "Json"
 
-assert_ok       "rtk json tsconfig"             rtk json "$ARISTOTE/tsconfig.json"
-assert_ok       "rtk json package.json"         rtk json "$ARISTOTE/package.json"
+assert_ok       "rtk-tx json tsconfig"             rtk-tx json "$ARISTOTE/tsconfig.json"
+assert_ok       "rtk-tx json package.json"         rtk-tx json "$ARISTOTE/package.json"
 
 # ── 7. Env ───────────────────────────────────────────
 
 section "Env"
 
-assert_ok       "rtk env"                       rtk env
-assert_ok       "rtk env --filter NODE"         rtk env --filter NODE
+assert_ok       "rtk-tx env"                       rtk-tx env
+assert_ok       "rtk-tx env --filter NODE"         rtk-tx env --filter NODE
 
 # ── 8. Tsc ───────────────────────────────────────────
 
 section "TypeScript (tsc)"
 
 if command -v npx >/dev/null 2>&1 && [[ -d "$ARISTOTE/node_modules" ]]; then
-    assert_output "rtk tsc (in aristote)" "error\|✅\|TS" rtk tsc --project "$ARISTOTE"
+    assert_output "rtk-tx tsc (in aristote)" "error\|✅\|TS" rtk-tx tsc --project "$ARISTOTE"
 else
-    skip_test "rtk tsc" "node_modules not installed"
+    skip_test "rtk-tx tsc" "node_modules not installed"
 fi
 
 # ── 9. ESLint ────────────────────────────────────────
@@ -170,21 +170,21 @@ fi
 section "ESLint (lint)"
 
 if command -v npx >/dev/null 2>&1 && [[ -d "$ARISTOTE/node_modules" ]]; then
-    assert_output "rtk lint (in aristote)" "error\|warning\|✅\|violations\|clean" rtk lint --project "$ARISTOTE"
+    assert_output "rtk-tx lint (in aristote)" "error\|warning\|✅\|violations\|clean" rtk-tx lint --project "$ARISTOTE"
 else
-    skip_test "rtk lint" "node_modules not installed"
+    skip_test "rtk-tx lint" "node_modules not installed"
 fi
 
 # ── 10. Build (Vite) ─────────────────────────────────
 
-section "Build (Vite via rtk next)"
+section "Build (Vite via rtk-tx next)"
 
 if [[ -d "$ARISTOTE/node_modules" ]]; then
-    # Aristote uses Vite, not Next — but rtk next wraps the build script
+    # Aristote uses Vite, not Next — but rtk-tx next wraps the build script
     # Test with a timeout since builds can be slow
-    skip_test "rtk next build" "Vite project, not Next.js — use npm run build directly"
+    skip_test "rtk-tx next build" "Vite project, not Next.js — use npm run build directly"
 else
-    skip_test "rtk next build" "node_modules not installed"
+    skip_test "rtk-tx next build" "node_modules not installed"
 fi
 
 # ── 11. Diff ─────────────────────────────────────────
@@ -192,21 +192,21 @@ fi
 section "Diff"
 
 # Diff two config files that exist in the project
-assert_ok       "rtk diff tsconfigs"            rtk diff "$ARISTOTE/tsconfig.json" "$ARISTOTE/tsconfig.app.json"
+assert_ok       "rtk-tx diff tsconfigs"            rtk-tx diff "$ARISTOTE/tsconfig.json" "$ARISTOTE/tsconfig.app.json"
 
 # ── 12. Summary & Err ────────────────────────────────
 
 section "Summary & Err"
 
-assert_ok       "rtk summary ls"                rtk summary ls "$ARISTOTE/src"
-assert_ok       "rtk err ls"                    rtk err ls "$ARISTOTE/src"
+assert_ok       "rtk-tx summary ls"                rtk-tx summary ls "$ARISTOTE/src"
+assert_ok       "rtk-tx err ls"                    rtk-tx err ls "$ARISTOTE/src"
 
 # ── 13. Gain ─────────────────────────────────────────
 
 section "Gain (after above commands)"
 
-assert_ok       "rtk gain"                      rtk gain
-assert_ok       "rtk gain --history"            rtk gain --history
+assert_ok       "rtk-tx gain"                      rtk-tx gain
+assert_ok       "rtk-tx gain --history"            rtk-tx gain --history
 
 # ══════════════════════════════════════════════════════
 # Report

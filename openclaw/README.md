@@ -1,25 +1,25 @@
 # RTK Plugin for OpenClaw
 
-Transparently rewrites shell commands executed via OpenClaw's `exec` tool to their RTK equivalents, achieving 60-90% LLM token savings.
+Transparently rewrites shell commands executed via OpenClaw's `exec` tool to their rtk-tx equivalents, achieving 60-90% LLM token savings.
 
 This is the OpenClaw equivalent of the Claude Code hooks in `hooks/rtk-rewrite.sh`.
 
 ## How it works
 
-The plugin registers a `before_tool_call` hook that intercepts `exec` tool calls. When the agent runs a command like `git status`, the plugin delegates to `rtk rewrite` which returns the optimized command (e.g. `rtk git status`). The compressed output enters the agent's context window, saving tokens.
+The plugin registers a `before_tool_call` hook that intercepts `exec` tool calls. When the agent runs a command like `git status`, the plugin delegates to `rtk-tx rewrite` which returns the optimized command (e.g. `rtk-tx git status`). The compressed output enters the agent's context window, saving tokens.
 
-All rewrite logic lives in RTK itself (`rtk rewrite`). This plugin is a thin delegate -- when new filters are added to RTK, the plugin picks them up automatically with zero changes.
+All rewrite logic lives in rtk-tx itself (`rtk-tx rewrite`). This plugin is a thin delegate -- when new filters are added to rtk-tx, the plugin picks them up automatically with zero changes.
 
 ## Installation
 
 ### Prerequisites
 
-RTK must be installed and available in `$PATH`:
+rtk-tx must be installed from this fork checkout and available in `$PATH`:
 
 ```bash
-brew install rtk
-# or
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+# From a local rtk-tx fork checkout
+cargo install --path .
+rtk-tx --version
 ```
 
 ### Install the plugin
@@ -61,12 +61,12 @@ In `openclaw.json`:
 
 ## What gets rewritten
 
-Everything that `rtk rewrite` supports (30+ commands). See the [full command list](https://github.com/rtk-ai/rtk#commands).
+Everything that `rtk-tx rewrite` supports (30+ commands). See the [full command list](../README.md#commands).
 
 ## What's NOT rewritten
 
-Handled by `rtk rewrite` guards:
-- Commands already using `rtk`
+Handled by `rtk-tx rewrite` guards:
+- Commands already using `rtk-tx`
 - Piped commands (`|`, `&&`, `;`)
 - Heredocs (`<<`)
 - Commands without an RTK filter

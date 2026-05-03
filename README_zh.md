@@ -49,39 +49,30 @@ rtk 在命令输出到达 LLM 上下文之前进行过滤和压缩。单一 Rust
 
 ## 安装
 
-### Homebrew（推荐）
+### Source/local install
 
 ```bash
-brew install rtk
+# From a local rtk-tx fork checkout
+cargo install --path .
 ```
 
-### 快速安装（Linux/macOS）
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-```
-
-### Cargo
-
-```bash
-cargo install --git https://github.com/rtk-ai/rtk
-```
+> This fork documents source/local installation until package-manager or release publishing for `rtk-tx` is available in your environment.
 
 ### 验证
 
 ```bash
-rtk --version   # 应显示 "rtk 0.27.x"
-rtk gain        # 应显示 token 节省统计
+rtk-tx --version   # 应显示 "rtk-tx 0.34.3"
+rtk-tx gain        # 应显示 token 节省统计
 ```
 
 ## 快速开始
 
 ```bash
 # 1. 为 Claude Code 安装 hook（推荐）
-rtk init --global
+rtk-tx init --global
 
 # 2. 重启 Claude Code，然后测试
-git status  # 自动重写为 rtk git status
+git status  # 自动重写为 rtk-tx git status
 ```
 
 ## 工作原理

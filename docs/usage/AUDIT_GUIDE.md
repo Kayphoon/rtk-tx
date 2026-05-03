@@ -6,7 +6,7 @@ Complete guide to analyzing your rtk token savings with temporal breakdowns and 
 
 The `rtk gain` command provides comprehensive analytics for tracking your token savings across time periods.
 
-**Database Location**: `~/.local/share/rtk/history.db`
+**Database Location**: `~/.local/share/rtk-tx/history.db`
 **Retention Policy**: 90 days
 **Scope**: Global across all projects, worktrees, and Claude sessions
 
@@ -29,6 +29,10 @@ rtk gain --all --format csv > savings.csv
 # Combined flags
 rtk gain --graph --history --quota    # Classic view with extras
 rtk gain --daily --weekly --monthly   # Multiple breakdowns
+
+# Reset all tracking data
+rtk gain --reset          # prompts [y/N] before deleting
+rtk gain --reset --yes    # skip prompt (CI/scripts)
 ```
 
 ## Command Options
@@ -50,6 +54,15 @@ rtk gain --daily --weekly --monthly   # Multiple breakdowns
 | `--history` | Recent 10 commands |
 | `--quota` | Monthly quota analysis (Pro/5x/20x tiers) |
 | `--tier <TIER>` | Quota tier: pro, 5x, 20x (default: 20x) |
+
+### Reset Flag
+
+| Flag | Description |
+|------|-------------|
+| `--reset` | Permanently delete all tracking data (commands + parse failures) |
+| `--yes` | Skip the confirmation prompt (for CI/scripts) |
+
+> **Warning**: `--reset` is irreversible. It clears both the `commands` and `parse_failures` tables atomically. A `[y/N]` confirmation prompt is shown by default. In non-interactive environments (piped stdin), it defaults to `N` unless `--yes` is passed.
 
 ### Export Formats
 
@@ -279,18 +292,18 @@ Savings %       = (Saved / Input) × 100
 
 ```bash
 # Location
-ls -lh ~/.local/share/rtk/history.db
+ls -lh ~/.local/share/rtk-tx/history.db
 
 # Schema
-sqlite3 ~/.local/share/rtk/history.db ".schema"
+sqlite3 ~/.local/share/rtk-tx/history.db ".schema"
 
 # Recent records
-sqlite3 ~/.local/share/rtk/history.db \
+sqlite3 ~/.local/share/rtk-tx/history.db \
   "SELECT timestamp, rtk_cmd, saved_tokens FROM commands
    ORDER BY timestamp DESC LIMIT 10"
 
 # Total database size
-sqlite3 ~/.local/share/rtk/history.db \
+sqlite3 ~/.local/share/rtk-tx/history.db \
   "SELECT COUNT(*),
           SUM(saved_tokens) as total_saved,
           MIN(DATE(timestamp)) as first_record,
@@ -302,24 +315,24 @@ sqlite3 ~/.local/share/rtk/history.db \
 
 ```bash
 # Backup
-cp ~/.local/share/rtk/history.db ~/backups/rtk-history-$(date +%Y%m%d).db
+cp ~/.local/share/rtk-tx/history.db ~/backups/rtk-history-$(date +%Y%m%d).db
 
 # Restore
-cp ~/backups/rtk-history-20260128.db ~/.local/share/rtk/history.db
+cp ~/backups/rtk-history-20260128.db ~/.local/share/rtk-tx/history.db
 
 # Export for migration
-sqlite3 ~/.local/share/rtk/history.db .dump > rtk-backup.sql
+sqlite3 ~/.local/share/rtk-tx/history.db .dump > rtk-backup.sql
 ```
 
 ### Cleanup
 
 ```bash
 # Manual cleanup (older than 90 days)
-sqlite3 ~/.local/share/rtk/history.db \
+sqlite3 ~/.local/share/rtk-tx/history.db \
   "DELETE FROM commands WHERE timestamp < datetime('now', '-90 days')"
 
 # Reset all data
-rm ~/.local/share/rtk/history.db
+rm ~/.local/share/rtk-tx/history.db
 # Next rtk command will recreate database
 ```
 
@@ -379,10 +392,10 @@ def send_rtk_stats():
 
 ```bash
 # Check if database exists
-ls -lh ~/.local/share/rtk/history.db
+ls -lh ~/.local/share/rtk-tx/history.db
 
 # Check record count
-sqlite3 ~/.local/share/rtk/history.db "SELECT COUNT(*) FROM commands"
+sqlite3 ~/.local/share/rtk-tx/history.db "SELECT COUNT(*) FROM commands"
 
 # Run a tracked command to generate data
 rtk git status

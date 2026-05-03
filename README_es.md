@@ -48,39 +48,30 @@ rtk filtra y comprime las salidas de comandos antes de que lleguen al contexto d
 
 ## Instalacion
 
-### Homebrew (recomendado)
+### Instalacion desde fuente/local
 
 ```bash
-brew install rtk
+# Desde un checkout local del fork rtk-tx
+cargo install --path .
 ```
 
-### Instalacion rapida (Linux/macOS)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-```
-
-### Cargo
-
-```bash
-cargo install --git https://github.com/rtk-ai/rtk
-```
+> Este fork documenta la instalacion desde fuente/local hasta que exista publicacion por package-manager o release para `rtk-tx` en tu entorno.
 
 ### Verificacion
 
 ```bash
-rtk --version   # Debe mostrar "rtk 0.27.x"
-rtk gain        # Debe mostrar estadisticas de ahorro
+rtk-tx --version   # Debe mostrar "rtk-tx 0.34.3"
+rtk-tx gain        # Debe mostrar estadisticas de ahorro
 ```
 
 ## Inicio rapido
 
 ```bash
 # 1. Instalar hook para Claude Code (recomendado)
-rtk init --global
+rtk-tx init --global
 
 # 2. Reiniciar Claude Code, luego probar
-git status  # Automaticamente reescrito a rtk git status
+git status  # Automaticamente reescrito a rtk-tx git status
 ```
 
 ## Como funciona

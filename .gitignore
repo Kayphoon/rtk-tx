@@ -48,3 +48,7 @@ claudedocs
 
 # icm 
 .fastembed_cache/
+
+# Local orchestration artifacts
+.sisyphus/
+.ai_docs/

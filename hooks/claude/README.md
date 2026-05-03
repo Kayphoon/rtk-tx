@@ -6,9 +6,9 @@
 
 - Shell-based `PreToolUse` hook -- requires `jq` for JSON parsing
 - Returns `updatedInput` JSON for transparent command rewrite (agent doesn't know RTK is involved)
-- Exits silently (exit 0) on any failure: jq missing, rtk missing, rtk too old (< 0.23.0), no match
-- Version guard checks `rtk --version` against minimum 0.23.0
-- `rtk-awareness.md` is a slim 10-line instructions file embedded into CLAUDE.md by `rtk init`
+- Exits silently (exit 0) on any failure: jq missing, rtk-tx missing, rtk-tx too old (< 0.23.0), no match
+- Version guard checks `rtk-tx --version` against minimum 0.23.0
+- `rtk-awareness.md` is a slim instructions file embedded into CLAUDE.md by `rtk-tx init`
 
 ## Testing
 

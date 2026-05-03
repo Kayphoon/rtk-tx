@@ -4,7 +4,7 @@ use super::permissions::{check_command, PermissionVerdict};
 use crate::discover::registry;
 use std::io::Write;
 
-/// Run the `rtk rewrite` command.
+/// Run the `rtk-tx rewrite` command.
 ///
 /// Prints the RTK-rewritten command to stdout and exits with a code that tells
 /// the caller how to handle permissions:
@@ -65,6 +65,14 @@ mod tests {
 
     #[test]
     fn test_run_already_rtk_returns_some() {
+        assert_eq!(
+            registry::rewrite_command("rtk-tx git status", &[]),
+            Some("rtk-tx git status".into())
+        );
+    }
+
+    #[test]
+    fn test_run_legacy_already_rtk_returns_some() {
         assert_eq!(
             registry::rewrite_command("rtk git status", &[]),
             Some("rtk git status".into())
@@ -141,7 +149,7 @@ mod tests {
         fn test_no_auto_allow_bypass_for_unrecognized_commands() {
             // SECURITY: A command with no permission rules and no matching allow rule
             // must NOT be auto-allowed. This is the core of issue #1155.
-            // Even though `git status` can be rewritten to `rtk git status`,
+            // Even though `git status` can be rewritten to `rtk-tx git status`,
             // the absence of an allow rule means Default → exit 3 → ask.
             let verdict = check_command_with_rules("git status", &[], &[], &[]);
             assert_eq!(verdict, PermissionVerdict::Default);

@@ -53,45 +53,36 @@ rtk filtre et compresse les sorties de commandes avant qu'elles n'atteignent le 
 
 ## Installation
 
-### Homebrew (recommande)
+### Installation source/locale
 
 ```bash
-brew install rtk
+# Depuis un checkout local du fork rtk-tx
+cargo install --path .
 ```
 
-### Installation rapide (Linux/macOS)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-```
-
-### Cargo
-
-```bash
-cargo install --git https://github.com/rtk-ai/rtk
-```
+> Ce fork documente l'installation source/locale jusqu'a ce qu'une publication package-manager ou release pour `rtk-tx` soit disponible dans votre environnement.
 
 ### Verification
 
 ```bash
-rtk --version   # Doit afficher "rtk 0.27.x"
-rtk gain        # Doit afficher les statistiques d'economies
+rtk-tx --version   # Doit afficher "rtk-tx 0.34.3"
+rtk-tx gain        # Doit afficher les statistiques d'economies
 ```
 
-> **Attention** : Un autre projet "rtk" (Rust Type Kit) existe sur crates.io. Si `rtk gain` echoue, vous avez le mauvais package.
+> **Attention** : Un autre projet "rtk" (Rust Type Kit) existe sur crates.io. Si `rtk-tx gain` echoue, utilisez `cargo install --path .` depuis ce checkout du fork.
 
 ## Demarrage rapide
 
 ```bash
 # 1. Installer le hook pour Claude Code (recommande)
-rtk init --global
+rtk-tx init --global
 # Suivre les instructions pour enregistrer dans ~/.claude/settings.json
 
 # 2. Redemarrer Claude Code, puis tester
-git status  # Automatiquement reecrit en rtk git status
+git status  # Automatiquement reecrit en rtk-tx git status
 ```
 
-Le hook reecrit de maniere transparente les commandes (ex: `git status` -> `rtk git status`) avant execution.
+Le hook reecrit de maniere transparente les commandes (ex: `git status` -> `rtk-tx git status`) avant execution.
 
 ## Comment ca marche
 

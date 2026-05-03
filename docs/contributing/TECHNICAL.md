@@ -85,10 +85,10 @@ When an LLM agent runs a command (e.g., `git status`):
 
 1. The agent fires a `PreToolUse` event (or equivalent) containing the command as JSON
 2. The hook script reads the JSON, extracts the command string
-3. The hook calls `rtk rewrite "git status"` as a subprocess
-4. `rtk rewrite` consults the command registry and returns `rtk git status`
+3. The hook calls `rtk-tx rewrite "git status"` as a subprocess
+4. `rtk-tx rewrite` consults the command registry and returns `rtk-tx git status`
 5. The hook sends a response telling the agent to use the rewritten command
-6. If anything fails (jq missing, rtk not found, no match), the hook exits silently -- the raw command runs unchanged
+6. If anything fails (jq missing, rtk-tx not found, no match), the hook exits silently -- the raw command runs unchanged
 
 All rewrite logic lives in Rust (`src/discover/registry.rs`). Hooks are thin delegates that handle agent-specific JSON formats.
 
@@ -213,7 +213,7 @@ Key design decisions:
 
 Once the rewritten command reaches RTK:
 
-1. **Telemetry**: `telemetry::maybe_ping()` fires a non-blocking daily usage ping
+1. **Telemetry**: `telemetry::maybe_ping()` is a no-op in rtk-tx v1; no remote network ping is sent
 2. **Clap parsing**: `Cli::try_parse()` matches against the `Commands` enum
 3. **Hook check**: `hook_check::maybe_warn()` warns if the installed hook is outdated (rate-limited to 1/day)
 4. **Integrity check**: `integrity::runtime_check()` verifies the hook's SHA-256 hash for operational commands
@@ -262,7 +262,7 @@ Command received
 
 ### 3.6 Token Tracking
 
-Every command execution records metrics to SQLite (`~/.local/share/rtk/tracking.db`):
+Every command execution records metrics to local SQLite (`~/.local/share/rtk-tx/history.db` by default):
 
 - Input tokens (raw output size) and output tokens (filtered size)
 - Savings percentage, execution time, project path
@@ -277,7 +277,7 @@ Analytics commands (`rtk gain`, `rtk cc-economics`, `rtk session`) query this da
 
 On command failure (non-zero exit code):
 
-1. Raw unfiltered output is saved to `~/.local/share/rtk/tee/{epoch}_{slug}.log`
+1. Raw unfiltered output is saved to `~/.local/share/rtk-tx/tee/{epoch}_{slug}.log`
 2. A hint line is printed: `[full output: ~/.../tee/1234_cargo_test.log]`
 3. LLM agents can re-read the file instead of re-running the failed command
 
@@ -350,7 +350,7 @@ Compiled filter modules for complex transformations with 60-95% token savings.
 
 ### TOML DSL Filters (src/filters/*.toml)
 
-Declarative filters with an 8-stage pipeline: strip ANSI, regex replace, match output, strip/keep lines, truncate lines, head/tail, max lines, on-empty message. Loaded from three tiers: built-in (compiled), global (`~/.config/rtk/filters/`), project-local (`.rtk/filters/`, trust-gated).
+Declarative filters with an 8-stage pipeline: strip ANSI, regex replace, match output, strip/keep lines, truncate lines, head/tail, max lines, on-empty message. Loaded from three tiers: built-in (compiled), global (`~/.config/rtk-tx/filters/`), project-local (`.rtk/filters/`, trust-gated).
 
 > **Details**: [`src/core/README.md`](../src/core/README.md) covers the TOML filter engine.
 

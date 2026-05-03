@@ -50,7 +50,10 @@ pub fn run_copilot() -> Result<()> {
     let v: Value = match serde_json::from_str(input) {
         Ok(v) => v,
         Err(e) => {
-            let _ = writeln!(io::stderr(), "[rtk hook] Failed to parse JSON input: {e}");
+            let _ = writeln!(
+                io::stderr(),
+                "[rtk-tx hook] Failed to parse JSON input: {e}"
+            );
             return Ok(());
         }
     };
@@ -169,7 +172,7 @@ fn handle_copilot_cli(cmd: &str) -> Result<()> {
     let output = json!({
         "permissionDecision": "deny",
         "permissionDecisionReason": format!(
-            "Token savings: use `{}` instead (rtk saves 60-90% tokens)",
+            "Token savings: use `{}` instead (rtk-tx saves 60-90% tokens)",
             rewritten
         )
     });
@@ -262,7 +265,10 @@ fn sanitize_log_field(s: &str) -> String {
 
 fn audit_log_inner(action: &str, original: &str, rewritten: &str) -> Option<()> {
     let home = dirs::home_dir()?;
-    let dir = home.join(".local").join("share").join("rtk");
+    let dir = home
+        .join(".local")
+        .join("share")
+        .join(crate::core::constants::RTK_DATA_DIR);
     std::fs::create_dir_all(&dir).ok()?;
     let path = dir.join("hook-audit.log");
     let mut file = std::fs::OpenOptions::new()
@@ -297,7 +303,13 @@ enum PayloadAction {
     Ignore,
 }
 
-fn process_claude_payload(v: &Value) -> PayloadAction {
+#[derive(Clone, Copy)]
+enum PermissionMode {
+    Claude,
+    NoPermissionCheck,
+}
+
+fn process_claude_payload(v: &Value, permission_mode: PermissionMode) -> PayloadAction {
     let cmd = match v
         .pointer("/tool_input/command")
         .and_then(|c| c.as_str())
@@ -307,7 +319,10 @@ fn process_claude_payload(v: &Value) -> PayloadAction {
         None => return PayloadAction::Ignore,
     };
 
-    let verdict = permissions::check_command(cmd);
+    let verdict = match permission_mode {
+        PermissionMode::Claude => permissions::check_command(cmd),
+        PermissionMode::NoPermissionCheck => PermissionVerdict::Default,
+    };
     if verdict == PermissionVerdict::Deny {
         return PayloadAction::Skip {
             reason: "skip:deny_rule",
@@ -355,6 +370,15 @@ fn process_claude_payload(v: &Value) -> PayloadAction {
 
 /// Run the Claude Code PreToolUse hook natively.
 pub fn run_claude() -> Result<()> {
+    run_claude_compatible_hook("claude", PermissionMode::Claude)
+}
+
+/// Run the CodeBuddy Code PreToolUse hook natively.
+pub fn run_codebuddy() -> Result<()> {
+    run_claude_compatible_hook("codebuddy", PermissionMode::NoPermissionCheck)
+}
+
+fn run_claude_compatible_hook(adapter: &str, permission_mode: PermissionMode) -> Result<()> {
     let input = read_stdin_limited()?;
 
     let input = input.trim();
@@ -365,12 +389,15 @@ pub fn run_claude() -> Result<()> {
     let v: Value = match serde_json::from_str(input) {
         Ok(v) => v,
         Err(e) => {
-            let _ = writeln!(io::stderr(), "[rtk hook] Failed to parse JSON input: {e}");
+            let _ = writeln!(
+                io::stderr(),
+                "[rtk-tx hook {adapter}] Failed to parse JSON input: {e}"
+            );
             return Ok(());
         }
     };
 
-    match process_claude_payload(&v) {
+    match process_claude_payload(&v, permission_mode) {
         PayloadAction::Rewrite {
             cmd,
             rewritten,
@@ -390,8 +417,18 @@ pub fn run_claude() -> Result<()> {
 
 #[cfg(test)]
 fn run_claude_inner(input: &str) -> Option<String> {
+    run_claude_compatible_inner(input, PermissionMode::Claude)
+}
+
+#[cfg(test)]
+fn run_codebuddy_inner(input: &str) -> Option<String> {
+    run_claude_compatible_inner(input, PermissionMode::NoPermissionCheck)
+}
+
+#[cfg(test)]
+fn run_claude_compatible_inner(input: &str, permission_mode: PermissionMode) -> Option<String> {
     let v: Value = serde_json::from_str(input).ok()?;
-    match process_claude_payload(&v) {
+    match process_claude_payload(&v, permission_mode) {
         PayloadAction::Rewrite { output, .. } => Some(output.to_string()),
         _ => None,
     }
@@ -509,6 +546,25 @@ fn run_cursor_inner_with_rules(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static HOOK_TEST_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct CurrentDirGuard(std::path::PathBuf);
+
+    impl CurrentDirGuard {
+        fn set_to(path: &std::path::Path) -> Self {
+            let original = std::env::current_dir().unwrap();
+            std::env::set_current_dir(path).unwrap();
+            Self(original)
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.0).unwrap();
+        }
+    }
 
     // --- Copilot format detection ---
 
@@ -571,6 +627,11 @@ mod tests {
 
     #[test]
     fn test_get_rewritten_already_rtk() {
+        assert!(get_rewritten("rtk-tx git status").is_none());
+    }
+
+    #[test]
+    fn test_get_rewritten_legacy_already_rtk() {
         assert!(get_rewritten("rtk git status").is_none());
     }
 
@@ -593,7 +654,7 @@ mod tests {
             "decision": "allow",
             "hookSpecificOutput": {
                 "tool_input": {
-                    "command": "rtk git status"
+                    "command": "rtk-tx git status"
                 }
             }
         });
@@ -601,7 +662,7 @@ mod tests {
         assert_eq!(json["decision"], "allow");
         assert_eq!(
             json["hookSpecificOutput"]["tool_input"]["command"],
-            "rtk git status"
+            "rtk-tx git status"
         );
     }
 
@@ -609,15 +670,15 @@ mod tests {
     fn test_gemini_hook_uses_rewrite_command() {
         assert_eq!(
             rewrite_command("git status", &[]),
-            Some("rtk git status".into())
+            Some("rtk-tx git status".into())
         );
         assert_eq!(
             rewrite_command("cargo test", &[]),
-            Some("rtk cargo test".into())
+            Some("rtk-tx cargo test".into())
         );
         assert_eq!(
-            rewrite_command("rtk git status", &[]),
-            Some("rtk git status".into())
+            rewrite_command("rtk-tx git status", &[]),
+            Some("rtk-tx git status".into())
         );
         assert_eq!(rewrite_command("cat <<EOF", &[]), None);
     }
@@ -628,7 +689,7 @@ mod tests {
         assert_eq!(rewrite_command("curl https://example.com", &excluded), None);
         assert_eq!(
             rewrite_command("git status", &excluded),
-            Some("rtk git status".into())
+            Some("rtk-tx git status".into())
         );
     }
 
@@ -636,7 +697,7 @@ mod tests {
     fn test_gemini_hook_env_prefix_preserved() {
         assert_eq!(
             rewrite_command("RUST_LOG=debug cargo test", &[]),
-            Some("RUST_LOG=debug rtk cargo test".into())
+            Some("RUST_LOG=debug rtk-tx cargo test".into())
         );
     }
 
@@ -670,7 +731,7 @@ mod tests {
             .pointer("/hookSpecificOutput/updatedInput/command")
             .and_then(|c| c.as_str())
             .unwrap();
-        assert_eq!(cmd, "rtk git status");
+        assert_eq!(cmd, "rtk-tx git status");
     }
 
     #[test]
@@ -679,7 +740,7 @@ mod tests {
         let result = run_claude_inner(&input).unwrap();
         let v: Value = serde_json::from_str(&result).unwrap();
         let updated = &v["hookSpecificOutput"]["updatedInput"];
-        assert_eq!(updated["command"], "rtk git status");
+        assert_eq!(updated["command"], "rtk-tx git status");
         assert_eq!(updated["timeout"], 30000);
         assert_eq!(updated["description"], "Check repo status");
     }
@@ -696,6 +757,11 @@ mod tests {
 
     #[test]
     fn test_claude_already_rtk_passthrough() {
+        assert!(run_claude_inner(&claude_input("rtk-tx git status")).is_none());
+    }
+
+    #[test]
+    fn test_claude_legacy_already_rtk_passthrough() {
         assert!(run_claude_inner(&claude_input("rtk git status")).is_none());
     }
 
@@ -722,7 +788,7 @@ mod tests {
             .pointer("/hookSpecificOutput/updatedInput/command")
             .and_then(|c| c.as_str())
             .unwrap();
-        assert_eq!(cmd, "GIT_PAGER=cat rtk git status");
+        assert_eq!(cmd, "GIT_PAGER=cat rtk-tx git status");
     }
 
     #[test]
@@ -733,7 +799,7 @@ mod tests {
             .pointer("/hookSpecificOutput/updatedInput/command")
             .and_then(|c| c.as_str())
             .unwrap();
-        assert_eq!(cmd, "rtk git add . && rtk cargo test");
+        assert_eq!(cmd, "rtk-tx git add . && rtk-tx cargo test");
     }
 
     #[test]
@@ -756,6 +822,107 @@ mod tests {
         assert!(run_claude_inner(&input).is_none());
     }
 
+    // --- CodeBuddy handler ---
+
+    fn codebuddy_input(cmd: &str) -> String {
+        json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": { "command": cmd }
+        })
+        .to_string()
+    }
+
+    fn codebuddy_input_with_fields(cmd: &str, timeout: u64, description: &str) -> String {
+        json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": cmd,
+                "timeout": timeout,
+                "description": description,
+                "extra": { "keep": true }
+            }
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn test_codebuddy_rewrite_git_status() {
+        let result = run_codebuddy_inner(&codebuddy_input("git status")).unwrap();
+        let v: Value = serde_json::from_str(&result).unwrap();
+        let cmd = v
+            .pointer("/hookSpecificOutput/updatedInput/command")
+            .and_then(|c| c.as_str())
+            .unwrap();
+        assert_eq!(cmd, "rtk-tx git status");
+    }
+
+    #[test]
+    fn test_codebuddy_rewrite_preserves_tool_input_fields() {
+        let input = codebuddy_input_with_fields("git status", 30000, "Check repo status");
+        let result = run_codebuddy_inner(&input).unwrap();
+        let v: Value = serde_json::from_str(&result).unwrap();
+        let updated = &v["hookSpecificOutput"]["updatedInput"];
+        assert_eq!(updated["command"], "rtk-tx git status");
+        assert_eq!(updated["timeout"], 30000);
+        assert_eq!(updated["description"], "Check repo status");
+        assert_eq!(updated["extra"]["keep"], true);
+    }
+
+    #[test]
+    fn test_codebuddy_ignores_claude_deny_permissions() {
+        let _lock = HOOK_TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::TempDir::new().unwrap();
+        let claude_dir = temp.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(
+            claude_dir.join("settings.json"),
+            json!({
+                "permissions": {
+                    "deny": ["Bash(git status)"]
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let _cwd = CurrentDirGuard::set_to(temp.path());
+
+        assert!(
+            run_claude_inner(&codebuddy_input("git status")).is_none(),
+            "Claude-compatible hook must still honor Claude deny rules"
+        );
+
+        let result = run_codebuddy_inner(&codebuddy_input("git status")).unwrap();
+        let v: Value = serde_json::from_str(&result).unwrap();
+        let cmd = v
+            .pointer("/hookSpecificOutput/updatedInput/command")
+            .and_then(|c| c.as_str())
+            .unwrap();
+        assert_eq!(cmd, "rtk-tx git status");
+    }
+
+    #[test]
+    fn test_codebuddy_malformed_json_passthrough() {
+        assert!(run_codebuddy_inner("not valid json {{{").is_none());
+    }
+
+    #[test]
+    fn test_codebuddy_unsupported_command_passthrough() {
+        assert!(run_codebuddy_inner(&codebuddy_input("htop")).is_none());
+    }
+
+    #[test]
+    fn test_codebuddy_heredoc_passthrough() {
+        assert!(run_codebuddy_inner(&codebuddy_input("cat <<EOF\nhello\nEOF")).is_none());
+    }
+
+    #[test]
+    fn test_codebuddy_already_rtk_tx_passthrough() {
+        assert!(run_codebuddy_inner(&codebuddy_input("rtk-tx git status")).is_none());
+    }
+
     // --- Cursor handler ---
 
     fn cursor_input(cmd: &str) -> String {
@@ -772,7 +939,7 @@ mod tests {
         let v: Value = serde_json::from_str(&result).unwrap();
         // Default permission (no explicit allow rule) → "ask"
         assert_eq!(v["permission"], "ask");
-        assert_eq!(v["updated_input"]["command"], "rtk git status");
+        assert_eq!(v["updated_input"]["command"], "rtk-tx git status");
         assert!(v.get("hookSpecificOutput").is_none());
     }
 
@@ -796,6 +963,12 @@ mod tests {
 
     #[test]
     fn test_cursor_already_rtk_passthrough() {
+        let result = run_cursor_inner(&cursor_input("rtk-tx git status"));
+        assert_eq!(result, "{}");
+    }
+
+    #[test]
+    fn test_cursor_legacy_already_rtk_passthrough() {
         let result = run_cursor_inner(&cursor_input("rtk git status"));
         assert_eq!(result, "{}");
     }
@@ -813,7 +986,7 @@ mod tests {
     #[test]
     fn test_audit_log_silent_when_disabled() {
         std::env::remove_var("RTK_HOOK_AUDIT");
-        audit_log("test", "git status", "rtk git status");
+        audit_log("test", "git status", "rtk-tx git status");
     }
 
     #[test]
@@ -830,7 +1003,7 @@ mod tests {
                 .open(&log_path)
                 .unwrap();
             let ts = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S");
-            writeln!(file, "{} | rewrite | git status | rtk git status", ts).unwrap();
+            writeln!(file, "{} | rewrite | git status | rtk-tx git status", ts).unwrap();
         }
 
         let content = std::fs::read_to_string(&log_path).unwrap();
@@ -843,7 +1016,7 @@ mod tests {
         );
         assert_eq!(parts[1], "rewrite");
         assert_eq!(parts[2], "git status");
-        assert_eq!(parts[3], "rtk git status");
+        assert_eq!(parts[3], "rtk-tx git status");
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

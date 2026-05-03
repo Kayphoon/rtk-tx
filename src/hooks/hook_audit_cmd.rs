@@ -4,14 +4,16 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// Default log file location (aligned with hook's $HOME/.local/share/rtk/).
+/// Default log file location (aligned with hook's $HOME/.local/share/rtk-tx/).
 fn default_log_path() -> PathBuf {
     if let Ok(dir) = std::env::var("RTK_AUDIT_DIR") {
         PathBuf::from(dir).join("hook-audit.log")
     } else {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         PathBuf::from(home)
-            .join(".local/share/rtk")
+            .join(".local")
+            .join("share")
+            .join(crate::core::constants::RTK_DATA_DIR)
             .join("hook-audit.log")
     }
 }
@@ -180,11 +182,11 @@ mod tests {
 
     #[test]
     fn test_parse_line_rewrite() {
-        let line = "2026-02-16T14:30:01Z | rewrite | git status | rtk git status";
+        let line = "2026-02-16T14:30:01Z | rewrite | git status | rtk-tx git status";
         let entry = parse_line(line).unwrap();
         assert_eq!(entry.action, "rewrite");
         assert_eq!(entry.original_cmd, "git status");
-        assert_eq!(entry._rewritten_cmd, "rtk git status");
+        assert_eq!(entry._rewritten_cmd, "rtk-tx git status");
     }
 
     #[test]
@@ -240,15 +242,15 @@ mod tests {
 
     #[test]
     fn test_token_savings() {
-        // Simulate what rtk hook-audit would output vs raw log dump
-        let raw_log = r#"2026-02-16T14:30:01Z | rewrite | git status | rtk git status
+        // Simulate what rtk-tx hook-audit would output vs raw log dump
+        let raw_log = r#"2026-02-16T14:30:01Z | rewrite | git status | rtk-tx git status
 2026-02-16T14:30:02Z | skip:no_match | echo hello | -
-2026-02-16T14:30:03Z | rewrite | cargo test | rtk cargo test
-2026-02-16T14:30:04Z | skip:already_rtk | rtk git log | -
-2026-02-16T14:30:05Z | rewrite | git log --oneline -10 | rtk git log --oneline -10
-2026-02-16T14:30:06Z | rewrite | gh pr view 42 | rtk gh pr view 42
+2026-02-16T14:30:03Z | rewrite | cargo test | rtk-tx cargo test
+2026-02-16T14:30:04Z | skip:already_rtk | rtk-tx git log | -
+2026-02-16T14:30:05Z | rewrite | git log --oneline -10 | rtk-tx git log --oneline -10
+2026-02-16T14:30:06Z | rewrite | gh pr view 42 | rtk-tx gh pr view 42
 2026-02-16T14:30:07Z | skip:no_match | mkdir -p foo | -
-2026-02-16T14:30:08Z | rewrite | cargo clippy --all-targets | rtk cargo clippy --all-targets"#;
+2026-02-16T14:30:08Z | rewrite | cargo clippy --all-targets | rtk-tx cargo clippy --all-targets"#;
 
         let entries: Vec<AuditEntry> = raw_log.lines().filter_map(parse_line).collect();
         assert_eq!(entries.len(), 8);

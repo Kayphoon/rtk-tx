@@ -1,141 +1,67 @@
-# CI/CD Flows
+# rtk-tx CI/CD Flows
 
-## PR Quality Gates (ci.yml)
+This fork keeps CI/CD inside GitHub Actions and GitHub Releases. It does not publish to crates.io, Homebrew, npm, Docker, winget, Discord, or any external distribution channel.
 
-Trigger: pull_request to develop or master
+## PR Quality Gates (`ci.yml`)
 
-```
-                          ┌──────────────────┐
-                          │    PR opened      │
-                          └────────┬─────────┘
-                                   │
-                          ┌────────▼─────────┐
-                          │       fmt         │
-                          └────────┬─────────┘
-                                   │
-                          ┌────────▼─────────┐
-                          │ clippy            │
-                          │ -D unsafe_code    │
-                          └┬───┬───┬───┬───┬─┘
-                           │   │   │   │   │
-           ┌───────────────┘   │   │   │   └───────────────┐
-           │       ┌───────────┘   │   └──────────┐        │
-           ▼       ▼               ▼              ▼        ▼
-     ┌──────────┐ ┌──────────┐ ┌───────────┐ ┌─────────┐ ┌──────────┐
-     │ test     │ │ security │ │ semgrep   │ │benchmark│ │ doc      │
-     │ ubuntu   │ │ cargo    │ │ AST-aware │ │ >=80%   │ │ review   │
-     │ windows  │ │ audit    │ │ diff-only │ │ savings │ │ ai agent │
-     │ macos    │ │ patterns │ │           │ │         │ │          │
-     └────┬─────┘ └────┬─────┘ └─────┬─────┘ └────┬────┘ └────┬─────┘
-          │            │             │             │            │
-          └────────────┴─────────┬───┴─────────────┴────────────┘
-                                 │
-                      ┌──────────▼─────────┐
-                      │  All must pass     │
-                      │  to merge          │
-                      └────────────────────┘
+Trigger: pull requests targeting `develop` or `master`.
 
-     + DCO check (independent, develop PRs only)
-     + Dependabot (weekly: Cargo deps + GitHub Actions)
-```
+Main checks:
 
-## Merge to develop — pre-release (cd.yml)
+- `cargo fmt --all -- --check`
+- `cargo clippy --all-targets -- -D unsafe_code`
+- `cargo test --all` on Linux, macOS, and Windows
+- security scan, Semgrep, benchmark, and documentation review jobs
 
-Trigger: push to develop | workflow_dispatch (not master) | Concurrency: cancel-in-progress
+The benchmark job builds the `rtk-tx` release binary before running smoke benchmarks.
 
-```
-     ┌──────────────────┐
-     │ push to develop   │
-     │ OR dispatch       │
-     └────────┬─────────┘
-              │
-     ┌────────▼──────────────────┐
-     │ pre-release                │
-     │ compute next version      │
-     │ from conventional commits │
-     │ tag = v{next}-rc.{run}    │
-     └────────┬──────────────────┘
-              │
-     ┌────────▼──────────────────┐
-     │ release.yml               │
-     │ prerelease = true         │
-     └────────┬──────────────────┘
-              │
-     ┌────────▼──────────────────┐
-     │ Build                     │
-     │ 5 platforms + DEB + RPM   │
-     └────────┬──────────────────┘
-              │
-     ┌────────▼──────────────────┐
-     │ GitHub Release            │
-     │ (pre-release badge)       │
-     │                           │
-     │ Discord:  SKIPPED         │
-     │ Homebrew: SKIPPED         │
-     └──────────────────────────┘
+## Push / Manual Release Orchestration (`cd.yml`)
+
+Triggers:
+
+- push to `develop`: compute a pre-release tag and call `release.yml`
+- push to `master`: run release-please for `rtk-tx`, then call `release.yml` if a release is created
+- `workflow_dispatch`: manually trigger the same release orchestration
+
+`release-please` uses package name `rtk-tx`.
+
+## GitHub Release Builder (`release.yml`)
+
+Triggers:
+
+- called by `cd.yml`
+- manual `workflow_dispatch` with `tag` and `prerelease`
+
+Build outputs:
+
+- `rtk-tx-x86_64-apple-darwin.tar.gz`
+- `rtk-tx-aarch64-apple-darwin.tar.gz`
+- `rtk-tx-x86_64-unknown-linux-musl.tar.gz`
+- `rtk-tx-aarch64-unknown-linux-gnu.tar.gz`
+- `rtk-tx-x86_64-pc-windows-msvc.zip`
+- DEB and RPM packages
+- `checksums.txt`
+
+The release workflow uploads artifacts only to the GitHub Release for this repository.
+
+## Installer Flow (`install.sh`)
+
+`install.sh` downloads from GitHub Releases in `Kayphoon/rtk-tx`.
+
+Example:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/rtk-tx/master/install.sh | sh
 ```
 
-## Merge to master — stable release (cd.yml)
+Pin a version:
 
-Trigger: push to master (only) | Concurrency: never cancelled
-
-```
-     ┌──────────────────┐
-     │ push to master    │
-     └────────┬─────────┘
-              │
-     ┌────────▼──────────────────┐
-     │ release-please            │
-     │ analyze conventional      │
-     │ commits                   │
-     └────────┬──────────────────┘
-              │
-         ┌────┴────────────────┐
-         │                     │
-    no release           release created
-         │                     │
-         ▼                     ▼
-  ┌──────────────┐    ┌───────────────────────┐
-  │ create/update│    │ release.yml            │
-  │ release PR   │    │ prerelease = false     │
-  └──────────────┘    └───────────┬───────────┘
-                                  │
-                     ┌────────────▼────────────┐
-                     │ Build                   │
-                     │ 5 platforms + DEB + RPM  │
-                     └────────────┬────────────┘
-                                  │
-                     ┌────────────▼────────────┐
-                     │ GitHub Release           │
-                     │ (stable, "Latest" badge) │
-                     └──┬─────────┬─────────┬──┘
-                        │         │         │
-                        ▼         ▼         ▼
-                    Discord   Homebrew   latest
-                    notify    tap update  tag
+```bash
+RTK_TX_VERSION=v0.34.3 sh ./install.sh
 ```
 
-## Manual release (release.yml)
+The installer detects OS/architecture, downloads the matching `rtk-tx-${target}.tar.gz`, verifies `checksums.txt` when available, and installs `rtk-tx` into `${RTK_INSTALL_DIR:-$HOME/.local/bin}`.
 
-Trigger: workflow_dispatch
+## External Platform Publishing
 
-```
-     ┌────────────────────────┐
-     │ workflow_dispatch       │
-     │ inputs: tag, prerelease │
-     └───────────┬────────────┘
-                 │
-     ┌───────────▼────────────┐
-     │ Full build pipeline     │
-     │ 5 platforms + DEB + RPM │
-     └───────────┬────────────┘
-                 │
-          ┌──────┴──────┐
-          │             │
-   prerelease=false  prerelease=true
-          │             │
-          ▼             ▼
-     Discord        pre-release
-     Homebrew       badge only
-     latest tag
-```
+Publishing to crates.io, Homebrew, Docker/GHCR, winget, npm, or distro package repositories is intentionally out of scope for this repo-internal CI/CD setup. Those channels require separate accounts, package ownership, tokens, signing, and platform-specific review workflows.

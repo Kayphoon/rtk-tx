@@ -4,7 +4,7 @@
 
 set -e
 
-REPO="rtk-ai/rtk"
+REPO="Kayphoon/rtk-tx"
 BINARY_NAME="rtk-tx"
 INSTALL_DIR="${RTK_INSTALL_DIR:-$HOME/.local/bin}"
 
@@ -64,7 +64,7 @@ get_latest_version() {
     fi
 
     if [ -z "$VERSION" ]; then
-        error "Failed to get latest version (GitHub API may be rate-limited; set RTK_VERSION=vX.Y.Z to pin)"
+        error "Failed to get latest version (GitHub API may be rate-limited; set RTK_TX_VERSION=vX.Y.Z to pin)"
     fi
 }
 
@@ -90,12 +90,41 @@ install() {
     info "Version: $VERSION"
 
     DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}-${TARGET}.tar.gz"
+    CHECKSUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
     TEMP_DIR=$(mktemp -d)
     ARCHIVE="${TEMP_DIR}/${BINARY_NAME}.tar.gz"
+    CHECKSUMS="${TEMP_DIR}/checksums.txt"
+    ASSET_NAME="${BINARY_NAME}-${TARGET}.tar.gz"
 
     info "Downloading from: $DOWNLOAD_URL"
     if ! curl -fsSL "$DOWNLOAD_URL" -o "$ARCHIVE"; then
         error "Failed to download binary"
+    fi
+
+    info "Downloading checksums..."
+    if curl -fsSL "$CHECKSUMS_URL" -o "$CHECKSUMS"; then
+        EXPECTED_SHA=$(grep " ${ASSET_NAME}$" "$CHECKSUMS" | awk '{print $1}')
+        if [ -z "$EXPECTED_SHA" ]; then
+            warn "No checksum entry found for ${ASSET_NAME}; skipping checksum verification"
+        else
+            if command -v sha256sum >/dev/null 2>&1; then
+                ACTUAL_SHA=$(sha256sum "$ARCHIVE" | awk '{print $1}')
+            elif command -v shasum >/dev/null 2>&1; then
+                ACTUAL_SHA=$(shasum -a 256 "$ARCHIVE" | awk '{print $1}')
+            else
+                warn "sha256sum/shasum not found; skipping checksum verification"
+                ACTUAL_SHA=""
+            fi
+
+            if [ -n "$ACTUAL_SHA" ] && [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+                error "Checksum verification failed for ${ASSET_NAME}"
+            fi
+            if [ -n "$ACTUAL_SHA" ]; then
+                info "Checksum verified"
+            fi
+        fi
+    else
+        warn "checksums.txt not available; skipping checksum verification"
     fi
 
     info "Extracting..."
@@ -128,8 +157,12 @@ main() {
     detect_os
     detect_arch
     get_target
-    if [ -n "$RTK_VERSION" ]; then
+    if [ -n "$RTK_TX_VERSION" ]; then
+        VERSION="$RTK_TX_VERSION"
+        info "Using pinned version from RTK_TX_VERSION: $VERSION"
+    elif [ -n "$RTK_VERSION" ]; then
         VERSION="$RTK_VERSION"
+        warn "RTK_VERSION is deprecated for rtk-tx; use RTK_TX_VERSION instead"
         info "Using pinned version from RTK_VERSION: $VERSION"
     else
         get_latest_version

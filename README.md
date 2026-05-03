@@ -1,470 +1,172 @@
 # rtk-tx
 
-面向 Tencent CodeBuddy Code 的 rtk 派生 fork 项目。
+面向 Tencent CodeBuddy Code 的 `rtk-ai/rtk` fork 分支。
 
-这个仓库是 [rtk-ai/rtk](https://github.com/rtk-ai/rtk) 的 fork，专门为 **Tencent CodeBuddy Code** 场景做了定向改造。它保留了 upstream rtk 的核心过滤能力，但默认行为、集成入口和文档重心都更偏向 CodeBuddy 的实际使用方式。
+`rtk-tx` 不是普通 `rtk` 的重新包装，也不是 crates.io 上另一个同名工具。这个仓库保留 upstream `rtk` 的命令输出压缩能力，但把二进制名、rewrite 输出、CodeBuddy hook/init、tracking 路径和 telemetry 默认行为都调整为 CodeBuddy 优先。
 
-## 这个仓库的特殊性
+## 这个 fork 为什么存在
 
-与通用 rtk 相比，这个 fork 的重点是：
+upstream `rtk` 是一个通用 CLI proxy，用来把 `git`、`cargo`、`npm`、`pytest` 等命令输出压缩后再交给 LLM，减少 token 消耗。
 
-- **CodeBuddy 一等支持**：`rtk-tx hook codebuddy` 与 `rtk-tx init --codebuddy` / `rtk-tx init -g --codebuddy` 是重点集成路径。
-- **输出以 `rtk-tx` 为主**：rewrite 输出默认为 `rtk-tx ...`，而不是 upstream 的 `rtk ...`。
-- **remote telemetry 默认关闭**：`rtk-tx` v1 不发送远程 telemetry，保留本地 SQLite tracking / `rtk-tx gain`。
-- **本地 tracking 优先使用 `RTK_TX_DB_PATH`**：环境变量控制本地数据库路径，`RTK_DB_PATH` 仅作为 deprecated fallback。
-- **保留 inherited command filters**：继续保留 upstream rtk 已有的命令过滤能力，不随意删减。
+这个 fork 的目标更窄：
 
-这个仓库更适合：
+- 给 **Tencent CodeBuddy Code** 提供一等 hook 支持。
+- 生成独立二进制 **`rtk-tx`**，避免和普通 `rtk` 混用。
+- 让 rewrite 后的命令明确显示为 `rtk-tx ...`。
+- 保留本地 `gain` / tracking，但默认不发送 remote telemetry。
+- 让 README 默认用中文解释这个 fork 的特殊性。
 
-- 主要在 **CodeBuddy Code** 环境里工作
-- 希望保留 rtk 的过滤收益，但默认面向 CodeBuddy
-- 希望 remote telemetry 默认关闭，只保留本地统计
-- 希望 README 直接讲清楚 “这个仓库为什么存在” 以及 “它和 upstream rtk 有什么不同”
+## 和普通 rtk 有什么不同
 
-## 与 upstream rtk 的关系
+| 项目 | 普通 upstream `rtk` | 这个 fork `rtk-tx` |
+|---|---|---|
+| 仓库关系 | `rtk-ai/rtk` upstream | `Kayphoon/rtk-tx`，保留 GitHub fork 关系 |
+| 二进制名 | `rtk` | `rtk-tx` |
+| 版本命令 | `rtk --version` | `rtk-tx --version` |
+| rewrite 输出 | `rtk git status` | `rtk-tx git status` |
+| CodeBuddy hook | 非重点路径 | `rtk-tx hook codebuddy` |
+| CodeBuddy init | 非重点路径 | `rtk-tx init --codebuddy` / `rtk-tx init -g --codebuddy` |
+| tracking DB override | `RTK_DB_PATH` | `RTK_TX_DB_PATH` 优先，`RTK_DB_PATH` 仅 deprecated fallback |
+| gain 命令 | `rtk gain` | `rtk-tx gain` |
+| remote telemetry | 按 upstream 行为 | v1 默认禁用 / 无远程发送路径 |
 
-这个仓库来自 upstream `rtk-ai/rtk`，因此仍然保留原始开源项目相关的 license / attribution 要求。  
-如果你修改或再发布这个项目，请继续遵守原始 LICENSE 条款，不要把 upstream 版权信息直接删掉。
+结论：你的日常命令应该使用 **`rtk-tx ...`**，而不是普通 **`rtk ...`**。
 
-## 默认语言说明
+## 能不能构建独立 rtk-tx 版本
 
-这个 fork 的 README 默认以中文说明，原因很简单：  
-它不是一个通用文档项目，而是为了明确表达 **“这个仓库为什么存在”** 以及 **“它和 upstream rtk 有什么不同”**。
+可以。这个 fork 的 Cargo package / binary 已经是 `rtk-tx`。
 
----
+本地开发构建：
 
-rtk-tx filters and compresses command outputs before they reach your LLM context. Single Rust binary, 100+ supported commands, <10ms overhead.
+```bash
+cargo build
+./target/debug/rtk-tx --version
+```
 
-## Token Savings (30-min Claude Code Session)
+release 构建：
 
-| Operation | Frequency | Standard | rtk-tx | Savings |
-|-----------|-----------|----------|-----|---------|
-| `ls` / `tree` | 10x | 2,000 | 400 | -80% |
-| `cat` / `read` | 20x | 40,000 | 12,000 | -70% |
-| `grep` / `rg` | 8x | 16,000 | 3,200 | -80% |
-| `git status` | 10x | 3,000 | 600 | -80% |
-| `git diff` | 5x | 10,000 | 2,500 | -75% |
-| `git log` | 5x | 2,500 | 500 | -80% |
-| `git add/commit/push` | 8x | 1,600 | 120 | -92% |
-| `cargo test` / `npm test` | 5x | 25,000 | 2,500 | -90% |
-| `ruff check` | 3x | 3,000 | 600 | -80% |
-| `pytest` | 4x | 8,000 | 800 | -90% |
-| `go test` | 3x | 6,000 | 600 | -90% |
-| `docker ps` | 3x | 900 | 180 | -80% |
-| **Total** | | **~118,000** | **~23,900** | **-80%** |
+```bash
+cargo build --release
+./target/release/rtk-tx --version
+```
 
-> Estimates based on medium-sized TypeScript/Rust projects. Actual savings vary by project size.
-
-## Installation
-
-### Source/local install
+安装到本机 PATH：
 
 ```bash
 cargo install --path .
+rtk-tx --version
 ```
 
-> This fork documents source/local installation until package-manager or release publishing for `rtk-tx` is available in your environment.
-
-### Verify Installation
+也可以等 GitHub Release 产物生成后，通过仓库脚本下载安装：
 
 ```bash
-rtk-tx --version   # Should show "rtk-tx 0.34.3"
-rtk-tx gain        # Should show token savings stats
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/rtk-tx/master/install.sh | sh
 ```
 
-> **Name collision warning**: Another project named "rtk" (Rust Type Kit) exists on crates.io. If `rtk-tx gain` fails, you have the wrong package or `rtk-tx` is missing. Use `cargo install --path .` from this fork checkout.
-
-## Quick Start
+指定版本：
 
 ```bash
-# 1. Install for your AI tool
-rtk-tx init -g                     # Claude Code / Copilot (default)
-rtk-tx init --codebuddy            # CodeBuddy Code (project settings)
-rtk-tx init -g --codebuddy         # CodeBuddy Code (global settings)
-rtk-tx init -g --gemini            # Gemini CLI
-rtk-tx init -g --codex             # Codex (OpenAI)
-rtk-tx init -g --agent cursor      # Cursor
-rtk-tx init --agent windsurf       # Windsurf
-rtk-tx init --agent cline          # Cline / Roo Code
-rtk-tx init --agent kilocode       # Kilo Code
-rtk-tx init --agent antigravity    # Google Antigravity
-rtk-tx init --agent hermes         # Hermes
-
-# 2. Restart your AI tool, then test
-git status  # Automatically rewritten to rtk-tx git status
-rtk-tx rewrite "git status"  # -> rtk-tx git status
+RTK_TX_VERSION=v0.34.3 sh ./install.sh
 ```
 
-Hook-based agents rewrite Bash commands (e.g., `git status` -> `rtk-tx git status`) before execution. Plugin-based agents, including Hermes, use their plugin API to rewrite commands before execution. The agent receives compact output without needing to call `rtk-tx` explicitly.
+安装脚本会从 `Kayphoon/rtk-tx` 的 GitHub Releases 下载 `rtk-tx-${target}.tar.gz`，并在 release 提供 `checksums.txt` 时校验 sha256。
 
-### CodeBuddy Code setup
-
-CodeBuddy Code uses Claude-compatible hooks. Install the native adapter with:
+安装后，普通命令示例：
 
 ```bash
-rtk-tx init --codebuddy       # project: <project-root>/.codebuddy/settings.json
-rtk-tx init -g --codebuddy    # global: ~/.codebuddy/settings.json
-rtk-tx hook codebuddy         # hook adapter used by CodeBuddy settings
-```
-
-The settings entry uses `hooks.PreToolUse`, matcher `Bash`, and command `rtk-tx hook codebuddy`. When it rewrites a command, the hook emits `hookSpecificOutput.updatedInput.command` (for example, `rtk-tx rewrite "git status"` returns `rtk-tx git status`). `rtk-tx` v1 does **not** patch `.codebuddy/settings.local.json`.
-
-After external settings changes, CodeBuddy may require you to review or approve the hook configuration in its `/hooks` panel before the hook runs.
-
-**Important:** the hook only runs on Bash tool calls. Claude Code built-in tools like `Read`, `Grep`, and `Glob` do not pass through the Bash hook, so they are not auto-rewritten. To get RTK's compact output for those workflows, use shell commands (`cat`/`head`/`tail`, `rg`/`grep`, `find`) or call `rtk-tx read`, `rtk-tx grep`, or `rtk-tx find` directly.
-
-## How It Works
-
-```
-  Without rtk-tx:                                    With rtk-tx:
-
-  Claude  --git status-->  shell  -->  git         Claude  --git status-->  RTK  -->  git
-    ^                                   |            ^                      |          |
-    |        ~2,000 tokens (raw)        |            |   ~200 tokens        | filter   |
-    +-----------------------------------+            +------- (filtered) ---+----------+
-```
-
-Four strategies applied per command type:
-
-1. **Smart Filtering** - Removes noise (comments, whitespace, boilerplate)
-2. **Grouping** - Aggregates similar items (files by directory, errors by type)
-3. **Truncation** - Keeps relevant context, cuts redundancy
-4. **Deduplication** - Collapses repeated log lines with counts
-
-## Commands
-
-### Files
-```bash
-rtk-tx ls .                        # Token-optimized directory tree
-rtk-tx read file.rs                # Smart file reading
-rtk-tx read file.rs -l aggressive  # Signatures only (strips bodies)
-rtk-tx smart file.rs               # 2-line heuristic code summary
-rtk-tx find "*.rs" .               # Compact find results
-rtk-tx grep "pattern" .            # Grouped search results
-rtk-tx diff file1 file2            # Condensed diff
-```
-
-### Git
-```bash
-rtk-tx git status                  # Compact status
-rtk-tx git log -n 10               # One-line commits
-rtk-tx git diff                    # Condensed diff
-rtk-tx git add                     # -> "ok"
-rtk-tx git commit -m "msg"         # -> "ok abc1234"
-rtk-tx git push                    # -> "ok main"
-rtk-tx git pull                    # -> "ok 3 files +10 -2"
-```
-
-### GitHub CLI
-```bash
-rtk-tx gh pr list                  # Compact PR listing
-rtk-tx gh pr view 42               # PR details + checks
-rtk-tx gh issue list               # Compact issue listing
-rtk-tx gh run list                 # Workflow run status
-```
-
-### Test Runners
-```bash
-rtk-tx jest                        # Jest compact (failures only)
-rtk-tx vitest                      # Vitest compact (failures only)
-rtk-tx playwright test             # E2E results (failures only)
-rtk-tx pytest                      # Python tests (-90%)
-rtk-tx go test                     # Go tests (NDJSON, -90%)
-rtk-tx cargo test                  # Cargo tests (-90%)
-rtk-tx rake test                   # Ruby minitest (-90%)
-rtk-tx rspec                       # RSpec tests (JSON, -60%+)
-rtk-tx err <cmd>                   # Filter errors only from any command
-rtk-tx test <cmd>                  # Generic test wrapper - failures only (-90%)
-```
-
-### Build & Lint
-```bash
-rtk-tx lint                        # ESLint grouped by rule/file
-rtk-tx lint biome                  # Supports other linters
-rtk-tx tsc                         # TypeScript errors grouped by file
-rtk-tx next build                  # Next.js build compact
-rtk-tx prettier --check .          # Files needing formatting
-rtk-tx cargo build                 # Cargo build (-80%)
-rtk-tx cargo clippy                # Cargo clippy (-80%)
-rtk-tx ruff check                  # Python linting (JSON, -80%)
-rtk-tx golangci-lint run           # Go linting (JSON, -85%)
-rtk-tx rubocop                     # Ruby linting (JSON, -60%+)
-```
-
-### Package Managers
-```bash
-rtk-tx pnpm list                   # Compact dependency tree
-rtk-tx pip list                    # Python packages (auto-detect uv)
-rtk-tx pip outdated                # Outdated packages
-rtk-tx bundle install              # Ruby gems (strip Using lines)
-rtk-tx prisma generate             # Schema generation (no ASCII art)
-```
-
-### AWS
-```bash
-rtk-tx aws sts get-caller-identity # One-line identity
-rtk-tx aws ec2 describe-instances  # Compact instance list
-rtk-tx aws lambda list-functions   # Name/runtime/memory (strips secrets)
-rtk-tx aws logs get-log-events     # Timestamped messages only
-rtk-tx aws cloudformation describe-stack-events  # Failures first
-rtk-tx aws dynamodb scan           # Unwraps type annotations
-rtk-tx aws iam list-roles          # Strips policy documents
-rtk-tx aws s3 ls                   # Truncated with tee recovery
-```
-
-### Containers
-```bash
-rtk-tx docker ps                   # Compact container list
-rtk-tx docker images               # Compact image list
-rtk-tx docker logs <container>     # Deduplicated logs
-rtk-tx docker compose ps           # Compose services
-rtk-tx kubectl pods                # Compact pod list
-rtk-tx kubectl logs <pod>          # Deduplicated logs
-rtk-tx kubectl services            # Compact service list
-```
-
-### Data & Analytics
-```bash
-rtk-tx json config.json            # Structure without values
-rtk-tx deps                        # Dependencies summary
-rtk-tx env -f AWS                  # Filtered env vars
-rtk-tx log app.log                 # Deduplicated logs
-rtk-tx curl <url>                  # Truncate + save full output
-rtk-tx wget <url>                  # Download, strip progress bars
-rtk-tx summary <long command>      # Heuristic summary
-rtk-tx proxy <command>             # Raw passthrough + tracking
-```
-
-### Token Savings Analytics
-```bash
-rtk-tx gain                        # Summary stats
-rtk-tx gain --graph                # ASCII graph (last 30 days)
-rtk-tx gain --history              # Recent command history
-rtk-tx gain --daily                # Day-by-day breakdown
-rtk-tx gain --all --format json    # JSON export for dashboards
-
-rtk-tx discover                    # Find missed savings opportunities
-rtk-tx discover --all --since 7    # All projects, last 7 days
-
-rtk-tx session                     # Show RTK adoption across recent sessions
-```
-
-## Global Flags
-
-```bash
--u, --ultra-compact    # ASCII icons, inline format (extra token savings)
--v, --verbose          # Increase verbosity (-v, -vv, -vvv)
-```
-
-## Examples
-
-**Directory listing:**
-```
-# ls -la (45 lines, ~800 tokens)        # rtk-tx ls (12 lines, ~150 tokens)
-drwxr-xr-x  15 user staff 480 ...       my-project/
--rw-r--r--   1 user staff 1234 ...       +-- src/ (8 files)
-...                                      |   +-- main.rs
-                                         +-- Cargo.toml
-```
-
-**Git operations:**
-```
-# git push (15 lines, ~200 tokens)       # rtk-tx git push (1 line, ~10 tokens)
-Enumerating objects: 5, done.             ok main
-Counting objects: 100% (5/5), done.
-Delta compression using up to 8 threads
-...
-```
-
-**Test output:**
-```
-# cargo test (200+ lines on failure)     # rtk-tx test cargo test (~20 lines)
-running 15 tests                          FAILED: 2/15 tests
-test utils::test_parse ... ok               test_edge_case: assertion failed
-test utils::test_format ... ok              test_overflow: panic at utils.rs:18
-...
-```
-
-## Auto-Rewrite Hook
-
-The most effective way to use rtk-tx. The hook transparently intercepts Bash commands and rewrites them to rtk-tx equivalents before execution.
-
-**Result**: 100% rtk-tx adoption across all conversations and subagents, zero token overhead.
-
-**Scope note:** this only applies to Bash tool calls. Claude Code built-in tools such as `Read`, `Grep`, and `Glob` bypass the hook, so use shell commands or explicit `rtk-tx` commands when you want filtering there.
-
-### Setup
-
-```bash
-rtk-tx init -g                 # Install hook + RTK.md (recommended)
-rtk-tx init --codebuddy        # CodeBuddy project hook in <project-root>/.codebuddy/settings.json
-rtk-tx init -g --codebuddy     # CodeBuddy global hook in ~/.codebuddy/settings.json
-rtk-tx init -g --opencode      # OpenCode plugin (instead of Claude Code)
-rtk-tx init -g --auto-patch    # Non-interactive (CI/CD)
-rtk-tx init -g --hook-only     # Hook only, no RTK.md
-rtk-tx init --show             # Verify installation
-```
-
-After install, **restart Claude Code** or your target agent. For CodeBuddy, also check the `/hooks` panel if prompted to review externally changed hook settings.
-
-## Windows
-
-rtk-tx works on Windows with some limitations. The Claude auto-rewrite hook (`rtk-tx-rewrite.sh`) requires a Unix shell, so on native Windows rtk-tx falls back to **CLAUDE.md injection mode** — your AI assistant receives rtk-tx instructions but commands are not rewritten automatically.
-
-### Recommended: WSL (full support)
-
-For the best experience, use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) (Windows Subsystem for Linux). Inside WSL, RTK works exactly like Linux — full hook support, auto-rewrite, everything:
-
-```bash
-# Inside a local rtk-tx checkout
-cargo install --path .
-rtk-tx init -g
-```
-
-### Native Windows (limited support)
-
-On native Windows (cmd.exe / PowerShell), RTK filters work but the hook does not auto-rewrite commands:
-
-```powershell
-# 1. Build or install rtk-tx.exe from this fork and add it to your PATH
-# 2. Initialize (falls back to CLAUDE.md injection)
-rtk-tx init -g
-# 3. Use rtk-tx explicitly
+rtk-tx git status
 rtk-tx cargo test
+rtk-tx rewrite "git status"
+```
+
+`rtk-tx rewrite "git status"` 应输出：
+
+```text
 rtk-tx git status
 ```
 
-**Important**: Do not double-click `rtk-tx.exe` — it is a CLI tool that prints usage and exits immediately. Always run it from a terminal (Command Prompt, PowerShell, or Windows Terminal).
+## 有没有单独的 rtk-tx gain
 
-| Feature | WSL | Native Windows |
-|---------|-----|----------------|
-| Filters (cargo, git, etc.) | Full | Full |
-| Auto-rewrite hook | Yes | No (CLAUDE.md fallback) |
-| `rtk-tx init -g` | Hook mode | CLAUDE.md mode |
-| `rtk-tx gain` / analytics | Full | Full |
-
-## Supported AI Tools
-
-rtk-tx supports 14 AI coding tools. Each integration rewrites shell commands to `rtk-tx` equivalents for 60-90% token savings where the agent supports command interception.
-
-| Tool | Install | Method |
-|------|---------|--------|
-| **Claude Code** | `rtk-tx init -g` | PreToolUse hook (bash) |
-| **CodeBuddy Code** | `rtk-tx init --codebuddy` / `rtk-tx init -g --codebuddy` | Claude-compatible `PreToolUse` hook (`rtk-tx hook codebuddy`) |
-| **GitHub Copilot (VS Code)** | `rtk-tx init -g --copilot` | PreToolUse hook — transparent rewrite |
-| **GitHub Copilot CLI** | `rtk-tx init -g --copilot` | PreToolUse deny-with-suggestion (CLI limitation) |
-| **Cursor** | `rtk-tx init -g --agent cursor` | preToolUse hook (hooks.json) |
-| **Gemini CLI** | `rtk-tx init -g --gemini` | BeforeTool hook |
-| **Codex** | `rtk-tx init -g --codex` | AGENTS.md + RTK.md instructions |
-| **Windsurf** | `rtk-tx init --agent windsurf` | .windsurfrules (project-scoped) |
-| **Cline / Roo Code** | `rtk-tx init --agent cline` | .clinerules (project-scoped) |
-| **OpenCode** | `rtk-tx init -g --opencode` | Plugin TS (tool.execute.before) |
-| **OpenClaw** | `openclaw plugins install ./openclaw` | Plugin TS (before_tool_call) |
-| **Hermes** | `rtk-tx init --agent hermes` | Python plugin (terminal command mutation via `rtk-tx rewrite`) |
-| **Mistral Vibe** | Planned ([#800](https://github.com/rtk-ai/rtk/issues/800)) | Blocked on upstream |
-| **Kilo Code** | `rtk-tx init --agent kilocode` | .kilocode/rules/rtk-rules.md (project-scoped) |
-| **Google Antigravity** | `rtk-tx init --agent antigravity` | .agents/rules/antigravity-rtk-rules.md (project-scoped) |
-
-For per-agent setup details, override controls, and graceful degradation, see the [Supported Agents guide](https://www.rtk-ai.app/guide/getting-started/supported-agents).
-
-## Configuration
-
-`~/.config/rtk-tx/config.toml` (macOS: `~/Library/Application Support/rtk-tx/config.toml`):
-
-```toml
-[hooks]
-exclude_commands = ["curl", "playwright"]  # skip rewrite for these
-
-[tee]
-enabled = true          # save raw output on failure (default: true)
-mode = "failures"       # "failures", "always", or "never"
-```
-
-When a command fails, rtk-tx saves the full unfiltered output so the LLM can read it without re-executing:
-
-```
-FAILED: 2/15 tests
-[full output: ~/.local/share/rtk-tx/tee/1707753600_cargo_test.log]
-```
-
-For the full config reference (all sections, env vars, per-project filters), see the [Configuration guide](https://www.rtk-ai.app/guide/getting-started/configuration).
-
-### Uninstall
+有。`gain` 是 `rtk-tx` 二进制下面的子命令：
 
 ```bash
-rtk-tx init -g --uninstall     # Remove hook, RTK.md, settings.json entry
-cargo uninstall rtk-tx          # Remove binary
+rtk-tx gain
+rtk-tx gain --history
+rtk-tx gain --daily
+rtk-tx gain --all --format json
 ```
 
-## Documentation
+`rtk-tx gain` 使用 `rtk-tx` 的本地 SQLite tracking 数据。默认数据目录也已经从普通 `rtk` 迁移到 `rtk-tx` 命名空间。
 
-- **[rtk-ai.app/guide](https://www.rtk-ai.app/guide)** — full user guide (installation, supported agents, what gets optimized, analytics, configuration, troubleshooting)
-- **[INSTALL.md](INSTALL.md)** — detailed installation reference
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** — system design and technical decisions
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — contribution guide
-- **[SECURITY.md](SECURITY.md)** — security policy
+如果你想强制和普通 `rtk` 完全隔离，可以显式设置：
 
-## Privacy & Telemetry
-
-rtk-tx v1 does **not** send remote telemetry. The startup telemetry hook is a no-op, no telemetry endpoint is compiled or called, and `rtk-tx telemetry forget` does not contact a server.
-
-Local SQLite tracking remains available for `rtk-tx gain` and related analytics. By default it stores command savings data at `~/.local/share/rtk-tx/history.db`; override this with `RTK_TX_DB_PATH=/custom/path/history.db`. The legacy `RTK_DB_PATH` is accepted only as a deprecated fallback when `RTK_TX_DB_PATH` is unset.
-
-**What is NOT sent:** source code, file paths, command arguments, secrets, environment variables, personal data, repository contents, usage metrics, device hashes, or erasure requests.
-
-**Manage telemetry:**
 ```bash
-rtk-tx telemetry status     # Check local status
-rtk-tx telemetry enable     # Remote telemetry remains disabled/absent
-rtk-tx telemetry disable    # Save disabled state locally
-rtk-tx telemetry forget     # Delete local salt/marker/tracking DB only
+export RTK_TX_DB_PATH="$HOME/.local/share/rtk-tx/history.db"
+rtk-tx gain
 ```
 
-**Override via environment:**
+测试或临时验证时可以使用独立 DB：
+
 ```bash
-export RTK_TELEMETRY_DISABLED=1   # Harmless explicit block; remote telemetry is already disabled
-export RTK_TX_DB_PATH=/custom/path/history.db  # Override local tracking DB
+RTK_TX_DB_PATH=/tmp/rtk-tx-check.db rtk-tx gain
 ```
 
-## Star History
+说明：`RTK_DB_PATH` 仍可作为 deprecated fallback 被识别，但不再是这个 fork 的主推荐变量。
 
-<a href="https://www.star-history.com/?repos=rtk-ai%2Frtk&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=rtk-ai/rtk&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=rtk-ai/rtk&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=rtk-ai/rtk&type=date&legend=top-left" />
- </picture>
-</a>
+## CodeBuddy 用法
 
-## StarMapper
+项目级初始化：
 
-<a href="https://starmapper.bruniaux.com/rtk-ai/rtk">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://starmapper.bruniaux.com/api/map-image/rtk-ai/rtk?theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://starmapper.bruniaux.com/api/map-image/rtk-ai/rtk?theme=light" />
-    <img alt="StarMapper" src="https://starmapper.bruniaux.com/api/map-image/rtk-ai/rtk" />
-  </picture>
-</a>
+```bash
+rtk-tx init --codebuddy
+```
 
-## Core team
+全局初始化：
 
-- **Patrick Szymkowiak** — Founder
-  [GitHub](https://github.com/pszymkowiak) · [LinkedIn](https://www.linkedin.com/in/patrick-szymkowiak/)
-- **Florian Bruniaux** — Core contributor
-  [GitHub](https://github.com/FlorianBruniaux) · [LinkedIn](https://www.linkedin.com/in/florian-bruniaux-43408b83/)
-- **Adrien Eppling** — Core contributor
-  [GitHub](https://github.com/aeppling) · [LinkedIn](https://www.linkedin.com/in/adrien-eppling/)
+```bash
+rtk-tx init -g --codebuddy
+```
 
-## Contributing
+CodeBuddy hook 命令：
 
-Contributions welcome! Please open an issue or PR on [GitHub](https://github.com/rtk-ai/rtk).
+```bash
+rtk-tx hook codebuddy
+```
 
-Join the community on [Discord](https://discord.gg/RySmvNF5kF).
+CodeBuddy settings 中使用的是 Claude-compatible hook 结构：
 
-## License
+- hook event: `PreToolUse`
+- matcher: `Bash`
+- command: `rtk-tx hook codebuddy`
+- rewrite output: `hookSpecificOutput.updatedInput.command`
 
-MIT License - see [LICENSE](LICENSE) for details.
+这个 fork v1 不会 patch `.codebuddy/settings.local.json`。如果 CodeBuddy 检测到外部 settings 修改，可能还需要你在 CodeBuddy 的 `/hooks` 面板里确认。
 
-## Disclaimer
+## Privacy / telemetry
 
-See [DISCLAIMER.md](DISCLAIMER.md).
+`rtk-tx` v1 不发送 remote telemetry：
+
+- 不编译默认远程 telemetry endpoint。
+- 正常 hook / init / rewrite 流程不会发网络 telemetry。
+- `rtk-tx telemetry forget` 只处理本地 salt / marker / tracking DB。
+- 本地 SQLite tracking 保留，用于 `rtk-tx gain`。
+
+## 保留了哪些 upstream 能力
+
+这个 fork 仍继承 upstream `rtk` 的核心命令过滤能力，包括但不限于：
+
+- `git` / `gh`
+- `cargo`
+- `npm` / `pnpm` / `npx`
+- `vitest` / `jest` / `playwright`
+- `pytest` / `ruff` / `mypy`
+- `docker` / `kubectl` / `aws`
+- `grep` / `find` / `read` / `ls` / `tree`
+
+也就是说，`rtk-tx` 的重点不是删掉 upstream 功能，而是在保留这些功能的基础上，做 CodeBuddy 专属适配。
+
+## License / attribution
+
+这个仓库派生自 [rtk-ai/rtk](https://github.com/rtk-ai/rtk)，必须继续保留 upstream 的 LICENSE / copyright / attribution 信息。
+
+你可以把这个 fork 作为 `rtk-tx` 独立维护，但不能把 upstream license notice 删除后当作纯原创项目发布。

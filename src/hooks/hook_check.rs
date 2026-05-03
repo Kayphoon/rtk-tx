@@ -99,9 +99,9 @@ fn check_and_warn() -> Option<()> {
     let warning = match status() {
         HookStatus::Ok => return Some(()),
         HookStatus::Missing => {
-            "[rtk] /!\\ No hook installed — run `rtk init -g` for automatic token savings"
+            "[rtk-tx] /!\\ No hook installed — run `rtk-tx init -g` for automatic token savings"
         }
-        HookStatus::Outdated => "[rtk] /!\\ Hook outdated — run `rtk init -g` to update",
+        HookStatus::Outdated => "[rtk-tx] /!\\ Hook outdated — run `rtk-tx init -g` to update",
     };
 
     // Rate limit: warn once per day

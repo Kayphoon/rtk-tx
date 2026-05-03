@@ -78,7 +78,7 @@ pub fn run(
 
     if summary.total_commands == 0 {
         println!("No tracking data yet.");
-        println!("Run some rtk commands to start tracking savings.");
+        println!("Run some rtk-tx commands to start tracking savings.");
         return Ok(());
     }
 
@@ -126,7 +126,7 @@ pub fn run(
             hook_check::HookStatus::Missing => {
                 eprintln!(
                     "{}",
-                    "[warn] No hook installed — run `rtk init -g` for automatic token savings"
+                    "[warn] No hook installed — run `rtk-tx init -g` for automatic token savings"
                         .yellow()
                 );
                 eprintln!();
@@ -134,7 +134,7 @@ pub fn run(
             hook_check::HookStatus::Outdated => {
                 eprintln!(
                     "{}",
-                    "[warn] Hook outdated — run `rtk init -g` to update".yellow()
+                    "[warn] Hook outdated — run `rtk-tx init -g` to update".yellow()
                 );
                 eprintln!();
             }

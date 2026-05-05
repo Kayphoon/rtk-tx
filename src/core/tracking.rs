@@ -1239,19 +1239,14 @@ pub(crate) fn get_db_path() -> Result<PathBuf> {
         return Ok(PathBuf::from(custom_path));
     }
 
-    // Priority 2: Deprecated legacy environment variable RTK_DB_PATH
-    if let Ok(custom_path) = std::env::var("RTK_DB_PATH") {
-        return Ok(PathBuf::from(custom_path));
-    }
-
-    // Priority 3: Configuration file
+    // Priority 2: Configuration file
     if let Ok(config) = crate::core::config::Config::load() {
         if let Some(db_path) = config.tracking.database_path {
             return Ok(db_path);
         }
     }
 
-    // Priority 4: Default platform-specific location
+    // Priority 3: Default platform-specific location
     let data_dir = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
     Ok(data_dir.join(RTK_DATA_DIR).join(HISTORY_DB))
 }
@@ -1566,7 +1561,7 @@ mod tests {
     }
 
     // 7. get_db_path respects environment variable RTK_TX_DB_PATH
-    // 8. get_db_path falls back to default when no custom config
+    // 8. get_db_path ignores RTK_DB_PATH and falls back to default when no custom config
     // Combined into one test to avoid env var race between parallel tests
     #[test]
     fn test_db_path_env_and_default() {
@@ -1584,9 +1579,13 @@ mod tests {
         assert_eq!(db_path, custom_path);
 
         env::remove_var("RTK_TX_DB_PATH");
-        env::set_var("RTK_DB_PATH", &custom_path);
+        env::set_var("RTK_DB_PATH", &legacy_path);
         let db_path = get_db_path().expect("Failed to get db path");
-        assert_eq!(db_path, custom_path);
+        assert!(
+            db_path.ends_with("rtk-tx/history.db"),
+            "expected default path ending with rtk-tx/history.db, got: {}",
+            db_path.display()
+        );
 
         env::remove_var("RTK_DB_PATH");
         let db_path = get_db_path().expect("Failed to get db path");

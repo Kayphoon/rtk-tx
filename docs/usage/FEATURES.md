@@ -1337,7 +1337,6 @@ exclude_commands = []       # Commandes a exclure de la recriture automatique
 | Variable | Description |
 |----------|-------------|
 | `RTK_TX_DB_PATH` | Surcharge le chemin de la base SQLite locale |
-| `RTK_DB_PATH` | Ancien fallback deprecie pour la base SQLite locale |
 | `RTK_TEE_DIR` | Surcharge le repertoire tee |
 | `RTK_TELEMETRY_DISABLED=1` | Blocage explicite; la telemetrie distante est deja desactivee |
 | `RTK_HOOK_AUDIT=1` | Activer l'audit du hook |

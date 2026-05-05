@@ -59,7 +59,6 @@ For full details on what is collected, opt-out options, and GDPR rights, see [Te
 |----------|-------------|
 | `RTK_DISABLED=1` | Disable RTK for a single command (`RTK_DISABLED=1 git status`) |
 | `RTK_TX_DB_PATH` | Override the local SQLite tracking database path |
-| `RTK_DB_PATH` | Deprecated legacy fallback for the local tracking database path |
 | `RTK_TEE_DIR` | Override the tee directory |
 | `RTK_TELEMETRY_DISABLED=1` | Harmless explicit telemetry block; remote telemetry is already disabled |
 | `RTK_HOOK_AUDIT=1` | Enable hook audit logging |

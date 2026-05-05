@@ -119,7 +119,7 @@ Savings data is stored locally in SQLite:
 - **Location**: `~/.local/share/rtk-tx/history.db` (Linux / macOS)
 - **Retention**: 90 days (automatic cleanup)
 - **Scope**: Global across all projects and Claude sessions
-- **Override**: `RTK_TX_DB_PATH=/custom/path/history.db` (`RTK_DB_PATH` is a deprecated fallback)
+- **Override**: `RTK_TX_DB_PATH=/custom/path/history.db`
 
 ```bash
 # Inspect raw data

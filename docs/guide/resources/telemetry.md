@@ -18,7 +18,7 @@ Local SQLite tracking remains available for `rtk-tx gain` analytics.
 - Retention: 90 days by default via `[tracking].history_days`
 - Custom DB path: `RTK_TX_DB_PATH=/custom/path/history.db`
 
-`RTK_DB_PATH` is still accepted only as a deprecated fallback when `RTK_TX_DB_PATH` is unset.
+If `RTK_TX_DB_PATH` is unset, rtk-tx uses `[tracking].database_path` from config, then the default location above.
 
 ## What is not sent
 
@@ -43,4 +43,4 @@ Run:
 rtk-tx telemetry forget
 ```
 
-This deletes local telemetry identity files and the local tracking database resolved through `RTK_TX_DB_PATH`, deprecated `RTK_DB_PATH`, config, or the default `rtk-tx/history.db` location. No server-side erasure request is sent or needed because remote telemetry is absent in this v1 fork.
+This deletes local telemetry identity files and the local tracking database resolved through `RTK_TX_DB_PATH`, config, or the default `rtk-tx/history.db` location. No server-side erasure request is sent or needed because remote telemetry is absent in this v1 fork.

@@ -39,7 +39,7 @@ Override the local tracking database path with:
 export RTK_TX_DB_PATH=/custom/path/history.db
 ```
 
-The legacy `RTK_DB_PATH` variable is still accepted as a deprecated fallback when `RTK_TX_DB_PATH` is not set. Prefer `RTK_TX_DB_PATH` in new scripts and documentation.
+If `RTK_TX_DB_PATH` is unset, rtk-tx uses `[tracking].database_path` from config, then the default `rtk-tx/history.db` path.
 
 ## Erasure / deletion
 
@@ -47,7 +47,7 @@ The legacy `RTK_DB_PATH` variable is still accepted as a deprecated fallback whe
 
 1. records telemetry as disabled in local config,
 2. deletes the local device salt and telemetry marker if present,
-3. deletes the local SQLite tracking database resolved through `RTK_TX_DB_PATH`, deprecated `RTK_DB_PATH`, config, or the default `rtk-tx/history.db` path,
+3. deletes the local SQLite tracking database resolved through `RTK_TX_DB_PATH`, config, or the default `rtk-tx/history.db` path,
 4. prints that remote telemetry is absent and no server-side erasure request was sent or needed.
 
 You can also delete `~/.local/share/rtk-tx/history.db` manually; it will be recreated on the next tracked command.

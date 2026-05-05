@@ -49,7 +49,7 @@ CLI output (rtk gain) or JSON/CSV export
 - **macOS**: `~/Library/Application Support/rtk-tx/history.db`
 - **Windows**: `%APPDATA%\rtk-tx\history.db`
 
-Override the database path with `RTK_TX_DB_PATH=/custom/path/history.db`. The legacy `RTK_DB_PATH` variable is accepted only as a deprecated fallback when `RTK_TX_DB_PATH` is unset.
+Override the database path with `RTK_TX_DB_PATH=/custom/path/history.db`. If unset, rtk-tx uses `[tracking].database_path` from config, then the default location above.
 
 ### Data Retention
 

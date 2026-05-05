@@ -26,7 +26,7 @@ upstream `rtk` 是一个通用 CLI proxy，用来把 `git`、`cargo`、`npm`、`
 | rewrite 输出 | `rtk git status` | `rtk-tx git status` |
 | CodeBuddy hook | 非重点路径 | `rtk-tx hook codebuddy` |
 | CodeBuddy init | 非重点路径 | `rtk-tx init --codebuddy` / `rtk-tx init -g --codebuddy` |
-| tracking DB override | `RTK_DB_PATH` | `RTK_TX_DB_PATH` 优先，`RTK_DB_PATH` 仅 deprecated fallback |
+| tracking DB override | upstream legacy variable | `RTK_TX_DB_PATH` |
 | gain 命令 | `rtk gain` | `rtk-tx gain` |
 | remote telemetry | 按 upstream 行为 | v1 默认禁用 / 无远程发送路径 |
 
@@ -110,8 +110,6 @@ rtk-tx gain
 ```bash
 RTK_TX_DB_PATH=/tmp/rtk-tx-check.db rtk-tx gain
 ```
-
-说明：`RTK_DB_PATH` 仍可作为 deprecated fallback 被识别，但不再是这个 fork 的主推荐变量。
 
 ## CodeBuddy 用法
 

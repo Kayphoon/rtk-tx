@@ -52,3 +52,4 @@ claudedocs
 # Local orchestration artifacts
 .sisyphus/
 .ai_docs/
+.codebuddy/

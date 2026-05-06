@@ -309,7 +309,11 @@ enum PermissionMode {
     NoPermissionCheck,
 }
 
-fn process_claude_payload(v: &Value, permission_mode: PermissionMode) -> PayloadAction {
+fn process_claude_payload(
+    v: &Value,
+    permission_mode: PermissionMode,
+    include_modified_input: bool,
+) -> PayloadAction {
     let cmd = match v
         .pointer("/tool_input/command")
         .and_then(|c| c.as_str())
@@ -351,8 +355,15 @@ fn process_claude_payload(v: &Value, permission_mode: PermissionMode) -> Payload
     let mut hook_output = json!({
         "hookEventName": PRE_TOOL_USE_KEY,
         "permissionDecisionReason": "RTK auto-rewrite",
-        "updatedInput": updated_input
+        "updatedInput": updated_input.clone()
     });
+
+    if include_modified_input {
+        hook_output
+            .as_object_mut()
+            .unwrap()
+            .insert("modifiedInput".into(), updated_input);
+    }
 
     if verdict == PermissionVerdict::Allow {
         hook_output
@@ -397,7 +408,7 @@ fn run_claude_compatible_hook(adapter: &str, permission_mode: PermissionMode) ->
         }
     };
 
-    match process_claude_payload(&v, permission_mode) {
+    match process_claude_payload(&v, permission_mode, adapter == "codebuddy") {
         PayloadAction::Rewrite {
             cmd,
             rewritten,
@@ -417,18 +428,22 @@ fn run_claude_compatible_hook(adapter: &str, permission_mode: PermissionMode) ->
 
 #[cfg(test)]
 fn run_claude_inner(input: &str) -> Option<String> {
-    run_claude_compatible_inner(input, PermissionMode::Claude)
+    run_claude_compatible_inner(input, PermissionMode::Claude, false)
 }
 
 #[cfg(test)]
 fn run_codebuddy_inner(input: &str) -> Option<String> {
-    run_claude_compatible_inner(input, PermissionMode::NoPermissionCheck)
+    run_claude_compatible_inner(input, PermissionMode::NoPermissionCheck, true)
 }
 
 #[cfg(test)]
-fn run_claude_compatible_inner(input: &str, permission_mode: PermissionMode) -> Option<String> {
+fn run_claude_compatible_inner(
+    input: &str,
+    permission_mode: PermissionMode,
+    include_modified_input: bool,
+) -> Option<String> {
     let v: Value = serde_json::from_str(input).ok()?;
-    match process_claude_payload(&v, permission_mode) {
+    match process_claude_payload(&v, permission_mode, include_modified_input) {
         PayloadAction::Rewrite { output, .. } => Some(output.to_string()),
         _ => None,
     }
@@ -868,6 +883,21 @@ mod tests {
         assert_eq!(updated["timeout"], 30000);
         assert_eq!(updated["description"], "Check repo status");
         assert_eq!(updated["extra"]["keep"], true);
+    }
+
+    #[test]
+    fn test_codebuddy_modified_input_matches_updated_input() {
+        let result = run_codebuddy_inner(&codebuddy_input("git status")).unwrap();
+        let v: Value = serde_json::from_str(&result).unwrap();
+        let hook = &v["hookSpecificOutput"];
+        assert_eq!(hook["modifiedInput"], hook["updatedInput"]);
+    }
+
+    #[test]
+    fn test_claude_output_does_not_include_codebuddy_modified_input() {
+        let result = run_claude_inner(&claude_input("git status")).unwrap();
+        let v: Value = serde_json::from_str(&result).unwrap();
+        assert!(v["hookSpecificOutput"].get("modifiedInput").is_none());
     }
 
     #[test]

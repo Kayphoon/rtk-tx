@@ -20,3 +20,16 @@ pub const OPENCODE_PLUGIN_PATH: &str = ".config/opencode/plugins/rtk.ts";
 pub const CURSOR_DIR: &str = ".cursor";
 pub const CODEX_DIR: &str = ".codex";
 pub const GEMINI_DIR: &str = ".gemini";
+
+// ── CodeBuddy plugin constants ───────────────────────────────
+
+/// Plugin name used in the marketplace directory and plugin.json.
+pub const CODEBUDDY_PLUGIN_NAME: &str = "rtk-tx";
+/// Marketplace name where the plugin is installed.
+pub const CODEBUDDY_PLUGIN_MARKETPLACE: &str = "codebuddy-plugins-official";
+/// Key used in `enabledPlugins` in settings.json to enable the plugin.
+pub const CODEBUDDY_PLUGIN_ENABLED_KEY: &str = "rtk-tx@codebuddy-plugins-official";
+/// Subdirectory inside the plugin dir that holds the manifest.
+pub const CODEBUDDY_PLUGIN_MANIFEST_DIR: &str = ".codebuddy-plugin";
+/// Manifest file name inside the manifest subdirectory.
+pub const CODEBUDDY_PLUGIN_MANIFEST_FILE: &str = "plugin.json";

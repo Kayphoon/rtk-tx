@@ -1,6 +1,6 @@
 [package]
 name = "rtk-tx"
-version = "0.34.3"
+version = "0.35.0"
 edition = "2021"
 authors = ["Patrick Szymkowiak"]
 description = "rtk-tx - CodeBuddy-focused Rust Token Killer fork for minimizing LLM token consumption"

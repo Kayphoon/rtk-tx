@@ -78,6 +78,16 @@ CodeBuddy Code hooks are Claude-compatible: `rtk-tx` writes `hooks.PreToolUse` w
 
 After external settings changes, CodeBuddy may require you to review or approve the hook configuration in its `/hooks` panel.
 
+For WorkBuddy, patch WorkBuddy settings instead:
+
+```bash
+rtk-tx init --workbuddy       # project: <project-root>/.workbuddy/settings.json
+rtk-tx init -g --workbuddy    # global: ~/.workbuddy/settings.json
+rtk-tx hook workbuddy         # native WorkBuddy hook adapter
+```
+
+WorkBuddy hooks are Claude-compatible: `rtk-tx` writes `hooks.PreToolUse` with matcher `Bash|execute_command` (WorkBuddy IDE mode uses `execute_command` as the tool_name) and command `rtk-tx hook workbuddy`. Rewrites are returned through `hookSpecificOutput.updatedInput.command`. `rtk-tx` v1 does **not** patch `.workbuddy/settings.local.json`.
+
 ## Uninstall
 
 ```bash

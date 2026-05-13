@@ -11,6 +11,7 @@ use super::constants::{
     CODEBUDDY_PLUGIN_ENABLED_KEY, CODEBUDDY_PLUGIN_MANIFEST_DIR, CODEBUDDY_PLUGIN_MANIFEST_FILE,
     CODEBUDDY_PLUGIN_MARKETPLACE, CODEBUDDY_PLUGIN_NAME, CODEX_DIR, CURSOR_HOOK_COMMAND,
     GEMINI_HOOK_FILE, HOOKS_JSON, HOOKS_SUBDIR, PRE_TOOL_USE_KEY, REWRITE_HOOK_FILE, SETTINGS_JSON,
+    WORKBUDDY_DIR, WORKBUDDY_HOOK_COMMAND,
 };
 use super::integrity;
 
@@ -706,7 +707,7 @@ fn patch_settings_json_command(
         }
     }
 
-    insert_hook_entry(&mut root, hook_command)?;
+    insert_hook_entry(&mut root, hook_command, "Bash")?;
 
     // Backup original
     if settings_path.exists() {
@@ -779,9 +780,37 @@ pub fn run_codebuddy(global: bool, verbose: u8) -> Result<()> {
     Ok(())
 }
 
+/// Initialize WorkBuddy settings with the native rtk-tx Bash hook.
+pub fn run_workbuddy(global: bool, verbose: u8) -> Result<()> {
+    let settings_path = resolve_workbuddy_settings_path(global)?;
+
+    let patch_result = patch_workbuddy_settings_json(&settings_path, verbose)?;
+
+    if patch_result == PatchResult::AlreadyPresent {
+        println!("\n  settings.json: WorkBuddy hook already present");
+    } else {
+        println!("\n  settings.json: WorkBuddy hook added");
+    }
+
+    println!("  WorkBuddy settings: {}", settings_path.display());
+    println!("  Command: {}", WORKBUDDY_HOOK_COMMAND);
+    if global {
+        println!("  Restart WorkBuddy. Test with: git status\n");
+    } else {
+        println!("  For global setup, run: rtk-tx init -g --workbuddy\n");
+    }
+
+    Ok(())
+}
+
 fn resolve_codebuddy_settings_path(global: bool) -> Result<PathBuf> {
     let cwd = std::env::current_dir().context("Failed to determine current working directory")?;
     codebuddy_settings_path_from(global, dirs::home_dir(), &cwd)
+}
+
+fn resolve_workbuddy_settings_path(global: bool) -> Result<PathBuf> {
+    let cwd = std::env::current_dir().context("Failed to determine current working directory")?;
+    workbuddy_settings_path_from(global, dirs::home_dir(), &cwd)
 }
 
 // ── CodeBuddy plugin installation ────────────────────────────
@@ -950,6 +979,22 @@ fn codebuddy_settings_path_from(
     Ok(codebuddy_dir.join(SETTINGS_JSON))
 }
 
+fn workbuddy_settings_path_from(
+    global: bool,
+    home_dir: Option<PathBuf>,
+    cwd: &Path,
+) -> Result<PathBuf> {
+    let workbuddy_dir = if global {
+        home_dir
+            .map(|home| home.join(WORKBUDDY_DIR))
+            .context("Cannot determine home directory. Is $HOME set?")?
+    } else {
+        cwd.join(WORKBUDDY_DIR)
+    };
+
+    Ok(workbuddy_dir.join(SETTINGS_JSON))
+}
+
 /// Patches `.codebuddy/settings.json` with a settings-based hook (for CLI usage).
 fn patch_codebuddy_settings_json(path: &Path, verbose: u8) -> Result<PatchResult> {
     let mut root = if path.exists() {
@@ -977,7 +1022,7 @@ fn patch_codebuddy_settings_json(path: &Path, verbose: u8) -> Result<PatchResult
     }
 
     if !already_present {
-        insert_hook_entry(&mut root, CODEBUDDY_HOOK_COMMAND)?;
+        insert_hook_entry(&mut root, CODEBUDDY_HOOK_COMMAND, "Bash")?;
     }
 
     if let Some(parent) = path.parent() {
@@ -990,6 +1035,48 @@ fn patch_codebuddy_settings_json(path: &Path, verbose: u8) -> Result<PatchResult
     atomic_write(path, &serialized)?;
 
     println!("\n  settings.json: CodeBuddy hook added");
+    Ok(PatchResult::Patched)
+}
+
+/// Patches `.workbuddy/settings.json` with a settings-based hook (for CLI usage).
+fn patch_workbuddy_settings_json(path: &Path, verbose: u8) -> Result<PatchResult> {
+    let mut root = if path.exists() {
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read {}", path.display()))?;
+
+        if content.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse {} as JSON", path.display()))?
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    let already_present = exact_command_hook_already_present(&root, WORKBUDDY_HOOK_COMMAND);
+    let deduped = dedupe_exact_command_hooks(&mut root, WORKBUDDY_HOOK_COMMAND);
+
+    if already_present && !deduped {
+        if verbose > 0 {
+            eprintln!("WorkBuddy settings.json: hook already present");
+        }
+        return Ok(PatchResult::AlreadyPresent);
+    }
+
+    if !already_present {
+        insert_hook_entry(&mut root, WORKBUDDY_HOOK_COMMAND, "Bash|execute_command")?;
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
+    }
+
+    let serialized = serde_json::to_string_pretty(&root)
+        .context("Failed to serialize WorkBuddy settings.json")?;
+    atomic_write(path, &serialized)?;
+
     Ok(PatchResult::Patched)
 }
 
@@ -1078,7 +1165,11 @@ fn clean_double_blanks(content: &str) -> String {
 
 /// Deep-merge RTK hook entry into settings.json
 /// Creates hooks.PreToolUse structure if missing, preserves existing hooks
-fn insert_hook_entry(root: &mut serde_json::Value, hook_command: &str) -> Result<()> {
+fn insert_hook_entry(
+    root: &mut serde_json::Value,
+    hook_command: &str,
+    matcher: &str,
+) -> Result<()> {
     let root_obj = match root.as_object_mut() {
         Some(obj) => obj,
         None => {
@@ -1100,7 +1191,7 @@ fn insert_hook_entry(root: &mut serde_json::Value, hook_command: &str) -> Result
         .context("PreToolUse value is not an array")?;
 
     pre_tool_use.push(serde_json::json!({
-        "matcher": "Bash",
+        "matcher": matcher,
         "hooks": [{
             "type": "command",
             "command": hook_command
@@ -3720,7 +3811,7 @@ More notes
         let mut json_content = serde_json::json!({});
         let hook_command = "/Users/test/.claude/hooks/rtk-rewrite.sh";
 
-        insert_hook_entry(&mut json_content, hook_command).unwrap();
+        insert_hook_entry(&mut json_content, hook_command, "Bash").unwrap();
 
         // Should create full structure
         assert!(json_content.get("hooks").is_some());
@@ -3752,7 +3843,7 @@ More notes
         });
 
         let hook_command = "/Users/test/.claude/hooks/rtk-rewrite.sh";
-        insert_hook_entry(&mut json_content, hook_command).unwrap();
+        insert_hook_entry(&mut json_content, hook_command, "Bash").unwrap();
 
         let pre_tool_use = json_content["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(pre_tool_use.len(), 2); // Should have both hooks
@@ -3775,7 +3866,7 @@ More notes
         });
 
         let hook_command = "/Users/test/.claude/hooks/rtk-rewrite.sh";
-        insert_hook_entry(&mut json_content, hook_command).unwrap();
+        insert_hook_entry(&mut json_content, hook_command, "Bash").unwrap();
 
         // Should preserve all other keys
         assert_eq!(json_content["env"]["PATH"], "/custom/path");
@@ -4595,5 +4686,93 @@ More notes
                 "settings.json must contain hook command"
             );
         });
+    }
+
+    // ─── WorkBuddy tests ────────────────────────────────────────────
+
+    #[test]
+    fn test_workbuddy_settings_path_project_and_global() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+
+        let project_path =
+            workbuddy_settings_path_from(false, Some(home.path().to_path_buf()), project.path())
+                .unwrap();
+        assert_eq!(
+            project_path,
+            project.path().join(WORKBUDDY_DIR).join(SETTINGS_JSON)
+        );
+
+        let global_path =
+            workbuddy_settings_path_from(true, Some(home.path().to_path_buf()), project.path())
+                .unwrap();
+        assert_eq!(
+            global_path,
+            home.path().join(WORKBUDDY_DIR).join(SETTINGS_JSON)
+        );
+    }
+
+    #[test]
+    fn test_workbuddy_patch_idempotent() {
+        let temp = TempDir::new().unwrap();
+        let settings = temp.path().join(WORKBUDDY_DIR).join(SETTINGS_JSON);
+
+        patch_workbuddy_settings_json(&settings, 0).unwrap();
+        patch_workbuddy_settings_json(&settings, 0).unwrap();
+
+        let root: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(count_exact_command_hooks(&root, WORKBUDDY_HOOK_COMMAND), 1);
+    }
+
+    #[test]
+    fn test_workbuddy_patch_uses_bash_execute_command_matcher() {
+        let temp = TempDir::new().unwrap();
+        let settings = temp.path().join(WORKBUDDY_DIR).join(SETTINGS_JSON);
+
+        patch_workbuddy_settings_json(&settings, 0).unwrap();
+
+        let root: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        let entry = &root["hooks"][PRE_TOOL_USE_KEY][0];
+        assert_eq!(entry["matcher"], "Bash|execute_command");
+        assert_eq!(entry["hooks"][0]["type"], "command");
+        assert_eq!(entry["hooks"][0]["command"], WORKBUDDY_HOOK_COMMAND);
+    }
+
+    #[test]
+    fn test_workbuddy_patch_preserves_unrelated_settings() {
+        let temp = TempDir::new().unwrap();
+        let settings = temp.path().join(WORKBUDDY_DIR).join(SETTINGS_JSON);
+        fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        fs::write(
+            &settings,
+            r#"{
+  "env": {"KEEP": "yes"},
+  "model": "preserve-me"
+}"#,
+        )
+        .unwrap();
+
+        patch_workbuddy_settings_json(&settings, 0).unwrap();
+
+        let root: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(root["env"]["KEEP"], "yes");
+        assert_eq!(root["model"], "preserve-me");
+        assert_eq!(count_exact_command_hooks(&root, WORKBUDDY_HOOK_COMMAND), 1);
+    }
+
+    #[test]
+    fn test_workbuddy_patch_malformed_json_preserves_original_bytes() {
+        let temp = TempDir::new().unwrap();
+        let settings = temp.path().join(WORKBUDDY_DIR).join(SETTINGS_JSON);
+        fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        let original = b"{ malformed json\n";
+        fs::write(&settings, original).unwrap();
+
+        let err = patch_workbuddy_settings_json(&settings, 0).unwrap_err();
+        assert!(err.to_string().contains("Failed to parse"));
+        assert_eq!(fs::read(&settings).unwrap(), original);
     }
 }

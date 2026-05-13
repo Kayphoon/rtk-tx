@@ -26,6 +26,8 @@ upstream `rtk` 是一个通用 CLI proxy，用来把 `git`、`cargo`、`npm`、`
 | rewrite 输出 | `rtk git status` | `rtk-tx git status` |
 | CodeBuddy hook | 非重点路径 | `rtk-tx hook codebuddy` |
 | CodeBuddy init | 非重点路径 | `rtk-tx init --codebuddy` / `rtk-tx init -g --codebuddy` |
+| WorkBuddy hook | 新增支持 | `rtk-tx hook workbuddy` |
+| WorkBuddy init | 新增支持 | `rtk-tx init --workbuddy` / `rtk-tx init -g --workbuddy` |
 | tracking DB override | upstream legacy variable | `RTK_TX_DB_PATH` |
 | gain 命令 | `rtk gain` | `rtk-tx gain` |
 | remote telemetry | 按 upstream 行为 | v1 默认禁用 / 无远程发送路径 |
@@ -139,6 +141,35 @@ CodeBuddy settings 中使用的是 Claude-compatible hook 结构：
 - rewrite output: `hookSpecificOutput.updatedInput.command`
 
 这个 fork v1 不会 patch `.codebuddy/settings.local.json`。如果 CodeBuddy 检测到外部 settings 修改，可能还需要你在 CodeBuddy 的 `/hooks` 面板里确认。
+
+## WorkBuddy 用法
+
+项目级初始化：
+
+```bash
+rtk-tx init --workbuddy
+```
+
+全局初始化：
+
+```bash
+rtk-tx init -g --workbuddy
+```
+
+WorkBuddy hook 命令：
+
+```bash
+rtk-tx hook workbuddy
+```
+
+WorkBuddy settings 使用 Claude-compatible hook 结构（与 CodeBuddy 相同）：
+
+- hook event: `PreToolUse`
+- matcher: `Bash|execute_command`（WorkBuddy IDE 模式使用 `execute_command` 作为 tool_name）
+- command: `rtk-tx hook workbuddy`
+- rewrite output: `hookSpecificOutput.updatedInput.command`
+
+这个 fork v1 不会 patch `.workbuddy/settings.local.json`。
 
 ## Privacy / telemetry
 

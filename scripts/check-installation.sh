@@ -129,6 +129,23 @@ fi
 echo "      If CodeBuddy reports externally changed hooks, review/approve them in /hooks."
 echo ""
 
+# Check 6b: WorkBuddy integration
+echo "6b. Checking WorkBuddy integration..."
+WORKBUDDY_INIT=false
+if [ -f "./.workbuddy/settings.json" ] && grep -q "rtk-tx hook workbuddy" "./.workbuddy/settings.json"; then
+    echo -e "   ${GREEN}✅${NC} Project WorkBuddy settings initialized (./.workbuddy/settings.json)"
+    WORKBUDDY_INIT=true
+elif [ -f "$HOME/.workbuddy/settings.json" ] && grep -q "rtk-tx hook workbuddy" "$HOME/.workbuddy/settings.json"; then
+    echo -e "   ${GREEN}✅${NC} Global WorkBuddy settings initialized (~/.workbuddy/settings.json)"
+    WORKBUDDY_INIT=true
+else
+    echo -e "   ${YELLOW}⚠️${NC}  WorkBuddy settings not initialized"
+    echo "      Run: rtk-tx init --workbuddy (project)"
+    echo "      Or:  rtk-tx init -g --workbuddy (global)"
+    echo "      Note: .workbuddy/settings.local.json is not patched by rtk-tx v1"
+fi
+echo ""
+
 # Check 7: Auto-rewrite hook
 echo "7. Checking auto-rewrite hook (optional but recommended)..."
 if [ -f "$HOME/.claude/hooks/rtk-rewrite.sh" ]; then
@@ -176,6 +193,11 @@ fi
 if [ "$CODEBUDDY_INIT" = false ]; then
     echo -e "${YELLOW}ℹ️  CodeBuddy setup is optional${NC}"
     echo "   Run: rtk-tx init --codebuddy or rtk-tx init -g --codebuddy"
+fi
+
+if [ "$WORKBUDDY_INIT" = false ]; then
+    echo -e "${YELLOW}ℹ️  WorkBuddy setup is optional${NC}"
+    echo "   Run: rtk-tx init --workbuddy or rtk-tx init -g --workbuddy"
 fi
 
 echo ""

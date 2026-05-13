@@ -342,6 +342,10 @@ enum Commands {
         #[arg(long)]
         codebuddy: bool,
 
+        /// Initialize for WorkBuddy settings hooks
+        #[arg(long)]
+        workbuddy: bool,
+
         /// Target agent to install hooks for (default: claude)
         #[arg(long, value_enum)]
         agent: Option<AgentTarget>,
@@ -762,6 +766,9 @@ enum HookCommands {
     /// Process CodeBuddy Code PreToolUse hook (reads JSON from stdin)
     #[command(name = "codebuddy")]
     CodeBuddy,
+    /// Process WorkBuddy PreToolUse hook (reads JSON from stdin)
+    #[command(name = "workbuddy")]
+    WorkBuddy,
     /// Process Cursor Agent hook (reads JSON from stdin)
     Cursor,
     /// Process Gemini CLI BeforeTool hook (reads JSON from stdin)
@@ -1757,6 +1764,7 @@ fn run_cli() -> Result<i32> {
             opencode,
             gemini,
             codebuddy,
+            workbuddy,
             agent,
             show,
             claude_md,
@@ -1774,6 +1782,8 @@ fn run_cli() -> Result<i32> {
                 hooks::init::uninstall(global, gemini, codex, cursor, cli.verbose)?;
             } else if codebuddy {
                 hooks::init::run_codebuddy(global, cli.verbose)?;
+            } else if workbuddy {
+                hooks::init::run_workbuddy(global, cli.verbose)?;
             } else if gemini {
                 let patch_mode = if auto_patch {
                     hooks::init::PatchMode::Auto
@@ -2120,6 +2130,10 @@ fn run_cli() -> Result<i32> {
             }
             HookCommands::CodeBuddy => {
                 hooks::hook_cmd::run_codebuddy()?;
+                0
+            }
+            HookCommands::WorkBuddy => {
+                hooks::hook_cmd::run_workbuddy()?;
                 0
             }
             HookCommands::Cursor => {
@@ -2626,6 +2640,34 @@ mod tests {
     }
 
     #[test]
+    fn test_try_parse_init_workbuddy() {
+        let cli = Cli::try_parse_from(["rtk-tx", "init", "--workbuddy"]).unwrap();
+        match cli.command {
+            Commands::Init {
+                workbuddy, global, ..
+            } => {
+                assert!(workbuddy);
+                assert!(!global);
+            }
+            _ => panic!("Expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_try_parse_init_global_workbuddy() {
+        let cli = Cli::try_parse_from(["rtk-tx", "init", "-g", "--workbuddy"]).unwrap();
+        match cli.command {
+            Commands::Init {
+                workbuddy, global, ..
+            } => {
+                assert!(workbuddy);
+                assert!(global);
+            }
+            _ => panic!("Expected Init command"),
+        }
+    }
+
+    #[test]
     fn test_try_parse_help_is_display_help() {
         match Cli::try_parse_from(["rtk", "--help"]) {
             Err(e) => assert_eq!(e.kind(), ErrorKind::DisplayHelp),
@@ -2752,6 +2794,17 @@ mod tests {
             cli.command,
             Commands::Hook {
                 command: HookCommands::CodeBuddy
+            }
+        ));
+    }
+
+    #[test]
+    fn test_hook_workbuddy_parses() {
+        let cli = Cli::try_parse_from(["rtk-tx", "hook", "workbuddy"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Hook {
+                command: HookCommands::WorkBuddy
             }
         ));
     }

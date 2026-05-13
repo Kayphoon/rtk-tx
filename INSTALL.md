@@ -83,6 +83,16 @@ rtk-tx hook codebuddy         # native hook adapter used in CodeBuddy settings
 
 `rtk-tx` v1 does **not** patch `.codebuddy/settings.local.json`.
 
+For WorkBuddy, choose the WorkBuddy-specific settings target:
+
+```bash
+rtk-tx init --workbuddy       # project: <project-root>/.workbuddy/settings.json
+rtk-tx init -g --workbuddy    # global: ~/.workbuddy/settings.json
+rtk-tx hook workbuddy         # native hook adapter used in WorkBuddy settings
+```
+
+`rtk-tx` v1 does **not** patch `.workbuddy/settings.local.json`.
+
 ### Recommended: Global Hook-First Setup
 
 **Best for: All projects, automatic RTK usage**
@@ -112,6 +122,9 @@ Claude Code's hook registry. RTK adds a PreToolUse hook that rewrites commands t
 CodeBuddy uses Claude-compatible Code hooks. `rtk-tx init --codebuddy` patches `<project-root>/.codebuddy/settings.json`; `rtk-tx init -g --codebuddy` patches `~/.codebuddy/settings.json`. The inserted entry uses `hooks.PreToolUse`, matcher `Bash`, and command `rtk-tx hook codebuddy`. Rewrites are returned with `hookSpecificOutput.updatedInput.command`; for example, `rtk-tx rewrite "git status"` returns `rtk-tx git status`.
 
 After external settings changes, CodeBuddy may require users to review or approve the hook configuration in CodeBuddy's `/hooks` panel before the hook runs.
+
+**WorkBuddy settings:**
+WorkBuddy also uses Claude-compatible hooks. `rtk-tx init --workbuddy` patches `<project-root>/.workbuddy/settings.json`; `rtk-tx init -g --workbuddy` patches `~/.workbuddy/settings.json`. The inserted entry uses `hooks.PreToolUse`, matcher `Bash|execute_command` (WorkBuddy IDE mode uses `execute_command` as the tool_name), and command `rtk-tx hook workbuddy`. Rewrites are returned with `hookSpecificOutput.updatedInput.command`.
 
 ```
   Claude Code          settings.json        rtk-rewrite.sh        rtk-tx binary
@@ -204,6 +217,18 @@ rtk-tx init -g --codebuddy
 rtk-tx rewrite "git status"  # -> rtk-tx git status
 
 # If CodeBuddy flags the changed settings, review/approve them in /hooks.
+```
+
+### WorkBuddy User
+```bash
+# Project-scoped setup
+rtk-tx init --workbuddy
+
+# Or global setup for all WorkBuddy projects
+rtk-tx init -g --workbuddy
+
+# Verify rewrite behavior directly
+rtk-tx rewrite "git status"  # -> rtk-tx git status
 ```
 
 ### CI/CD or Automation

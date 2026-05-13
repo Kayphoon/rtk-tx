@@ -1,6 +1,6 @@
 ---
 title: Supported Agents
-description: How to integrate RTK with Claude Code, CodeBuddy, Cursor, Copilot, Cline, Windsurf, Codex, OpenCode, Hermes, Kilo Code, and Antigravity
+description: How to integrate RTK with Claude Code, CodeBuddy, WorkBuddy, Cursor, Copilot, Cline, Windsurf, Codex, OpenCode, Hermes, Kilo Code, and Antigravity
 sidebar:
   order: 3
 ---
@@ -30,6 +30,7 @@ Agent runs "cargo test"
 |-------|-----------------|---------------------------|
 | Claude Code | Shell hook (`PreToolUse`) | Yes |
 | CodeBuddy Code | Rust binary (`rtk-tx hook codebuddy`) with Claude-compatible `PreToolUse` | Yes |
+| WorkBuddy | Rust binary (`rtk-tx hook workbuddy`) with Claude-compatible `PreToolUse` | Yes |
 | VS Code Copilot Chat | Shell hook (`PreToolUse`) | Yes |
 | GitHub Copilot CLI | Shell hook (deny-with-suggestion) | No (agent retries) |
 | Cursor | Shell hook (`preToolUse`) | Yes |
@@ -69,6 +70,18 @@ rtk-tx hook codebuddy         # native hook adapter used by settings
 CodeBuddy Code hooks are Claude-compatible. `rtk-tx` writes `hooks.PreToolUse` with matcher `Bash` and command `rtk-tx hook codebuddy`; the adapter emits rewrites through `hookSpecificOutput.updatedInput.command`. Direct check: `rtk-tx rewrite "git status"` → `rtk-tx git status`.
 
 `rtk-tx` v1 patches `<project-root>/.codebuddy/settings.json` for project setup and `~/.codebuddy/settings.json` for global setup. It does **not** patch `.codebuddy/settings.local.json`. After external settings changes, CodeBuddy may require review/approval in its `/hooks` panel before the hook runs.
+
+### WorkBuddy
+
+```bash
+rtk-tx init --workbuddy       # project: <project-root>/.workbuddy/settings.json
+rtk-tx init -g --workbuddy    # global: ~/.workbuddy/settings.json
+rtk-tx hook workbuddy         # native hook adapter used by settings
+```
+
+WorkBuddy hooks are Claude-compatible. `rtk-tx` writes `hooks.PreToolUse` with matcher `Bash|execute_command` (WorkBuddy IDE mode uses `execute_command` as the tool_name) and command `rtk-tx hook workbuddy`; the adapter emits rewrites through `hookSpecificOutput.updatedInput.command`. Direct check: `rtk-tx rewrite "git status"` → `rtk-tx git status`.
+
+`rtk-tx` v1 patches `<project-root>/.workbuddy/settings.json` for project setup and `~/.workbuddy/settings.json` for global setup. It does **not** patch `.workbuddy/settings.local.json`.
 
 ### Cursor
 

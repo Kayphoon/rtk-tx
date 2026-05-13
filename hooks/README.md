@@ -4,7 +4,7 @@
 
 **Deployed hook artifacts** — the actual files installed on user machines by `rtk-tx init`. These are shell scripts, TypeScript plugins, and rules files that run outside the Rust binary. They are **thin delegates**: parse agent-specific JSON, call `rtk-tx rewrite` as a subprocess, format agent-specific response. Zero filtering logic lives here.
 
-Owns: per-agent hook scripts and configuration files for supported agents (Claude Code, CodeBuddy Code, Copilot, Cursor, Cline, Windsurf, Codex, OpenCode, and related rule/plugin integrations).
+Owns: per-agent hook scripts and configuration files for supported agents (Claude Code, CodeBuddy Code, WorkBuddy, Copilot, Cursor, Cline, Windsurf, Codex, OpenCode, and related rule/plugin integrations).
 
 Does **not** own: hook installation/uninstallation (that's `src/hooks/init.rs`), the rewrite pattern registry (that's `discover/registry`), or integrity verification (that's `src/hooks/integrity.rs`).
 
@@ -47,6 +47,7 @@ Each agent subdirectory has its own README with hook-specific details:
 |-------|-----------|-----------|---------------------|
 | Claude Code | Shell hook (`PreToolUse`) | Transparent rewrite | Yes (`updatedInput`) |
 | CodeBuddy Code | Rust binary (`rtk-tx hook codebuddy`) | Transparent rewrite | Yes (`hookSpecificOutput.updatedInput.command`) |
+| WorkBuddy | Rust binary (`rtk-tx hook workbuddy`) | Transparent rewrite | Yes (`hookSpecificOutput.updatedInput.command`) |
 | VS Code Copilot Chat | Rust binary (`rtk-tx hook copilot`) | Transparent rewrite | Yes (`updatedInput`) |
 | GitHub Copilot CLI | Rust binary (`rtk-tx hook copilot`) | Deny-with-suggestion | No (agent retries) |
 | Cursor | Shell hook (`preToolUse`) | Transparent rewrite | Yes (`updated_input`) |
@@ -94,6 +95,31 @@ CodeBuddy Code hooks are Claude-compatible. The settings entry uses `hooks.PreTo
 After external settings changes, CodeBuddy may require users to review or approve the hook configuration in CodeBuddy's `/hooks` panel before the hook runs.
 
 **Input** (stdin): same as Claude Code.
+
+**Output** (stdout, when rewritten):
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow",
+    "permissionDecisionReason": "RTK auto-rewrite",
+    "updatedInput": { "command": "rtk-tx git status" }
+  }
+}
+```
+
+### WorkBuddy (Rust Binary)
+
+**Install:**
+```bash
+rtk-tx init --workbuddy       # project: <project-root>/.workbuddy/settings.json
+rtk-tx init -g --workbuddy    # global: ~/.workbuddy/settings.json
+rtk-tx hook workbuddy         # adapter command stored in settings
+```
+
+WorkBuddy hooks are Claude-compatible. The settings entry uses `hooks.PreToolUse`, matcher `Bash|execute_command` (WorkBuddy IDE mode uses `execute_command` as the tool_name), and command `rtk-tx hook workbuddy`. `rtk-tx` v1 does **not** patch `.workbuddy/settings.local.json`.
+
+**Input** (stdin): same as Claude Code (WorkBuddy IDE mode may use `execute_command` as `tool_name`).
 
 **Output** (stdout, when rewritten):
 ```json

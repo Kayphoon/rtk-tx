@@ -12,6 +12,10 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  statuses: write
+  repository-projects: write
+  deployments: write
+  packages: read
 
 jobs:
   # ═══════════════════════════════════════════════

@@ -64,11 +64,7 @@ rtk-tx init --codebuddy
 rtk-tx init -g --codebuddy
 ```
 
-hook 命令：
-
-```bash
-rtk-tx hook codebuddy
-```
+`init` 完成后，CodeBuddy 会在每次执行 bash 命令前自动调用 `rtk-tx hook codebuddy`，将命令改写为 `rtk-tx <原始命令>`，从而压缩输出。你不需要手动运行这个命令。
 
 hook 配置（Claude-compatible）：
 
@@ -95,11 +91,7 @@ rtk-tx init --workbuddy
 rtk-tx init -g --workbuddy
 ```
 
-hook 命令：
-
-```bash
-rtk-tx hook workbuddy
-```
+与 CodeBuddy 同理，`init` 完成后 WorkBuddy 会在执行命令前自动调用 `rtk-tx hook workbuddy` 进行改写，无需手动运行。
 
 hook 配置（Claude-compatible）：
 
